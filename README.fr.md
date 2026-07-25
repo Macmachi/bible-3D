@@ -2,6 +2,11 @@
 
 [English](README.md) · **Français**
 
+### → [Ouvrir la carte en ligne](https://macmachi.github.io/bible-3D/)
+
+*31 170 versets dans le navigateur, rien à installer. Fonctionne hors ligne une
+fois chargée.*
+
 Les **31 170 versets** de la Bible placés dans un espace tridimensionnel **selon
 ce qu'ils veulent dire**, et non selon leur position dans le livre. Deux versets
 voisins à l'écran parlent de la même chose, même s'ils sont séparés par mille

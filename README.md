@@ -2,6 +2,10 @@
 
 **English** · [Français](README.fr.md)
 
+### → [Open the live map](https://macmachi.github.io/bible-3D/)
+
+*31,170 verses in your browser, nothing to install. Works offline once loaded.*
+
 The **31,170 verses** of the Bible placed in three-dimensional space **by what
 they mean**, not by where they sit in the book. Two verses next to each other on
 screen are about the same thing, even when a thousand pages and two languages
