@@ -548,27 +548,8 @@ montrent.
   en blocs.
 - **Débruitage** : mesuré sur un étalon de quinze citations, dans les deux sens
   d'usage (voisinage et disposition).
-- **Visualiseur** : **44 contrôles automatisés** dans un vrai navigateur via CDP —
-  démarrage, WebGL, titre et recherche centrés, langue en tête de panneau, cinq
-  modes de couleur, sept formes de recherche (français, anglais, référence dans
-  les deux langues, sans accents, hébreu, grec), tentative d'injection HTML,
-  filtres, fiche d'amas et couleur de l'amas choisi, clic, panneau de détail, cohérence entre sélection et
-  filtres, bascule de langue, disposition choisie dans l'en-tête et sélecteurs
-  d'axes révélés au bon moment, légende de carte et six pôles étiquetés,
-  recherche par thème de bout en bout, persistance des réglages après
-  édition citée sous chaque texte, rechargement, **rendu tablette** en 1024 px de large en portrait (le cas iPad Pro), et
-  **rendu téléphone** en 412 px : tiroirs fermés puis ouverts,
-  exclusifs l'un de l'autre, aucun débordement horizontal, et rien qui recouvre
-  un tiroir ouvert — ni étiquette d'axe, ni légende — et en-tête de panneau qui
-  reste collé en haut au défilement, pour ne jamais perdre la croix de
-  fermeture. La politique de sécurité portée par la balise `<meta>` et la
-  mention de copyright sont vérifiées elles aussi. Zéro erreur console. Le
-  harnais qui pilote ces contrôles n'est pas publié : c'est un outil de mise au
-  point, sans intérêt pour la lecture du projet.
 - **Axes thématiques** : chaque axe est contrôlé en lisant ses versets extrêmes ;
   deux axes ont été réancrés après ce contrôle.
-- **Point d'entrée `/api/theme`** : requête vide rejetée (400), requête trop
-  longue rejetée (413), réponse de taille exacte vérifiée côté navigateur.
 - **Palette** : validée par mesure (bande de clarté, plancher de chroma,
   séparation CVD, contraste sur le fond réel), pas à l'œil.
 

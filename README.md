@@ -537,26 +537,8 @@ verse show it.
   slicing.
 - **Denoising**: measured against a benchmark of fifteen quotations, in both
   directions of use (neighbourhood and layout).
-- **Viewer**: **44 automated checks** in a real browser over CDP — startup,
-  WebGL, centred title and search, language at the top of the panel, five colour
-  modes, seven forms of search (French, English, reference in both languages,
-  accent-free, Hebrew, Greek), an HTML injection attempt, filters, the cluster
-  card and the selected cluster's colour, clicking, the detail panel, coherence
-  between selection and filters, language switching, the layout toggle in the
-  header and axis pickers revealed at the right moment, the map legend and six
-  labelled poles, theme search end to end, settings persisting across a reload,
-  the edition credited under each text, **tablet rendering** at 1024 px wide in
-  portrait (the iPad Pro case), and **phone rendering** at 412 px: drawers closed
-  then open, mutually exclusive, no horizontal overflow, and nothing covering an
-  open drawer — neither axis label nor legend — plus a panel header that stays
-  stuck to the top while scrolling, so the close button is never lost. The
-  security policy carried by the `<meta>` tag and the copyright notice are
-  verified too. Zero console errors. The harness that drives these checks is not
-  published: it is a development tool, of no interest for reading the project.
 - **Thematic axes**: each axis is checked by reading its extreme verses; two axes
   were re-anchored after that check.
-- **The `/api/theme` endpoint**: empty query rejected (400), over-long query
-  rejected (413), response size verified exactly on the browser side.
 - **Palette**: validated by measurement (lightness band, chroma floor, CVD
   separation, contrast against the real background), not by eye.
 
