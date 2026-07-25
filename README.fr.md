@@ -16,6 +16,19 @@ Quatre textes en regard : **hébreu massorétique** (Westminster Leningrad Codex
 **grec** (SBLGNT), **français** (Louis Segond 1910) et **anglais** (World English
 Bible). Interface en français et en anglais.
 
+> **La géométrie est calculée sur le texte français — Louis Segond 1910.**
+> L'hébreu et le grec sont alignés verset par verset, conservés et affichés
+> avec chaque point, mais ce n'est *pas* eux qui le placent. Aucun modèle
+> d'embedding de phrases n'est entraîné sur l'hébreu biblique ou le grec
+> koinè ; en appliquer un au texte massorétique produirait un nuage
+> d'apparence convaincante dont les regroupements ne voudraient rien dire.
+>
+> C'est la chose la plus importante à savoir avant de lire la carte : ce que
+> l'on voit est le sens **tel que rendu par Segond**, et non une vérité
+> indépendante du traducteur. Le raisonnement, et la façon de le vérifier
+> soi-même, sont dans
+> [Le sens est calculé sur le français, pas sur l'hébreu](#1-le-sens-est-calculé-sur-le-français-pas-sur-lhébreu).
+
 Aucune connaissance n'est donnée à la machine : elle ignore les livres, les
 auteurs, les genres et la chronologie. Elle ne voit que du texte. Tout
 regroupement visible a donc été **trouvé**, pas imposé.

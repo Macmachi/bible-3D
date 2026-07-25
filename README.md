@@ -15,6 +15,17 @@ Four texts side by side: **Masoretic Hebrew** (Westminster Leningrad Codex),
 **Greek** (SBLGNT), **French** (Louis Segond 1910) and **English** (World English
 Bible). The interface is available in French and English.
 
+> **The geometry is computed on the French text — Louis Segond 1910.** The
+> Hebrew and Greek are aligned verse by verse, stored, and displayed with every
+> point, but they are *not* what places it. No sentence-embedding model is
+> trained on Biblical Hebrew or Koine Greek; running one on the Masoretic text
+> would produce a convincing-looking cloud whose groupings mean nothing.
+>
+> This is the single most important thing to know before reading the map: what
+> you see is meaning **as rendered by Segond**, not a truth independent of the
+> translator. The reasoning, and how to test it yourself, is in
+> [Meaning is computed on the French, not the Hebrew](#1-meaning-is-computed-on-the-french-not-the-hebrew).
+
 The machine is given no prior knowledge: it knows nothing of books, authors,
 genres or chronology. It sees text and nothing else. Every grouping you can see
 was therefore **found**, not imposed.
