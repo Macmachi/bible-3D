@@ -1,0 +1,112 @@
+# ---------------------------------------------------------------------------
+# Environnement Python
+# Ces fichiers contiennent des CHEMINS ABSOLUS vers le dossier du projet — donc
+# le nom d'utilisateur et tout ce que contient l'arborescence au-dessus. Les
+# .pyc embarquent le chemin du source dans chaque objet code ; pyvenv.cfg et les
+# shebangs de .venv/bin/* contiennent le chemin de l'interpréteur.
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+
+# ---------------------------------------------------------------------------
+# Données téléchargées ou calculées — tout est reconstructible par le pipeline
+# ---------------------------------------------------------------------------
+data/raw/
+data/processed/
+data/models/
+
+# viewer/data/ n'est PAS ignoré : c'est la charge utile du site publié. Sans
+# lui, GitHub Pages afficherait un « Chargement… » éternel. Environ 29 Mo, dont
+# 21 Mo pour verses.json.
+#
+# Y publier des textes bibliques engage leurs licences (voir la section
+# « Licences » du README) : l'attribution est obligatoire. Pour un dépôt
+# purement logiciel, sans site publié, décommenter la ligne suivante.
+# viewer/data/
+
+# La version compressée est inutile sur GitHub Pages, qui compresse lui-même
+# à la volée : elle doublerait le poids du dépôt sans rien apporter.
+viewer/data/*.gz
+
+# ---------------------------------------------------------------------------
+# Réglages d'éditeurs et d'outils : contiennent régulièrement des chemins
+# absolus, des identifiants de machine ou des jetons
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.code-workspace
+.claude/
+.cursor/
+.zed/
+*.sublime-workspace
+*.sublime-project
+
+# ---------------------------------------------------------------------------
+# Outillage personnel — utile pour travailler sur le projet, sans rapport avec
+# sa lecture. Ces fichiers restent sur le disque, ils ne sont pas publiés.
+# ---------------------------------------------------------------------------
+scripts/check_privacy.py
+tests/
+
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+.netrc
+
+# ---------------------------------------------------------------------------
+# Captures d'écran et d'écran animé, archives
+# Le dépôt ne doit contenir que les trois images de docs/, référencées par le
+# README. Tout le reste — enregistrements de session, archives de travail — est
+# du matériel de mise au point : lourd, sans intérêt pour un lecteur, et
+# susceptible de montrer d'autres fenêtres, le nom de la machine ou des chemins.
+# ---------------------------------------------------------------------------
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.gif
+*.zip
+*.tar
+*.tar.*
+*.7z
+*.rar
+*.iso
+# les captures du README sont explicitement réintroduites
+!docs/*.png
+
+# ---------------------------------------------------------------------------
+# Divers
+# ---------------------------------------------------------------------------
+*.log
+*.tmp
+*.part
+*.swp
+*.swo
+*.kate-swp
+.*.kate-swp
+*~
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+desktop.ini

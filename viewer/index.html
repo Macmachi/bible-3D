@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Politique de sécurité portée par la page elle-même, et non seulement par
+     les en-têtes de serve.py : sur un hébergement statique (GitHub Pages), on
+     ne contrôle aucun en-tête HTTP, et la protection disparaîtrait. Elle
+     interdit tout script, toute feuille de style et toute connexion venant
+     d'ailleurs que de ce site. `frame-ancestors` n'est pas applicable par
+     balise meta — seul serve.py peut l'imposer. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
+               img-src 'self' data:; connect-src 'self'; base-uri 'none';
+               form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="description"
+      content="Les 31 170 versets de la Bible placés en 3D selon leur sens :
+               hébreu, grec, français et anglais.">
+<title>Bible 3D — visualisation sémantique</title>
+<!-- © 2026 Rymentz — CC BY-NC 4.0 — https://github.com/Macmachi/bible-3D -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d0d0d'/%3E%3Ccircle cx='11' cy='12' r='3' fill='%233987e5'/%3E%3Ccircle cx='21' cy='19' r='3' fill='%23d95926'/%3E%3Ccircle cx='13' cy='22' r='2' fill='%233987e5'/%3E%3Ccircle cx='22' cy='10' r='2' fill='%23d95926'/%3E%3C/svg%3E">
+<style>
+  /* Palette : instance de référence data-viz, pas séquentiel/catégoriel mélangés.
+     La scène est volontairement sombre — c'est une carte stellaire, pas un document. */
+  :root {
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface:     #1a1a19;
+    --ink:         #ffffff;
+    --ink-2:       #c3c2b7;
+    --muted:       #948f87;
+    --hairline:    #2c2c2a;
+    --border:      rgba(255,255,255,0.10);
+    --accent:      #3987e5;
+    --warn:        #fab219;
+    /* Les trois axes, un ton par direction. Trois teintes, c'est exactement ce
+       que la validation daltonisme laisse passer sur un fond commun. */
+    --axis-x:      #86b6ef;
+    --axis-y:      #ef8a4f;
+    --axis-z:      #5bbd94;
+    font-synthesis-weight: none;
+  }
+  * { box-sizing: border-box; }
+
+  /* Les navigateurs mobiles peignent un voile coloré sur l'élément touché, le
+     temps du contact. C'est utile sur un lien de la taille d'un mot ; ici le
+     canvas occupe tout l'écran, si bien que chaque tap sur un verset faisait
+     virer la carte entière au vert. Les boutons ont déjà leur propre état
+     :active, plus discret et cohérent avec le reste de l'interface. */
+  * { -webkit-tap-highlight-color: transparent; }
+
+  /* Un double-tap rapproché ne doit pas zoomer la page : sur la carte, deux
+     touchers successifs sont une manipulation de caméra, pas une demande de
+     grossissement du texte. */
+  html { touch-action: manipulation; }
+
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14.5px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  canvas { display: block; }
+  #scene { position: fixed; inset: 0; }
+
+  /* Ordre d'empilement, du fond vers l'avant : étiquettes d'axes (2), légende
+     et compteur (3), panneaux (10), en-tête (12), infobulle (20). Les
+     étiquettes d'axes vivent dans la scène et ne doivent jamais peindre
+     par-dessus un panneau — c'est arrivé au tiroir mobile, dont la géométrie
+     n'était mesurée qu'avant l'animation d'ouverture. */
+  .panel {
+    position: fixed; z-index: 10;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hairline) transparent;
+  }
+  #controls { top: 12px; left: 12px; width: 310px; max-height: calc(100vh - 24px); }
+  #details  { top: 12px; right: 12px; width: 410px; max-height: calc(100vh - 24px); }
+  @media (max-width: 1180px) {
+    #controls { width: 290px; }
+    #details  { width: 340px; }
+  }
+
+  /* ------------------------------------------------- téléphone et tablette
+     En dessous de 1100 px, deux colonnes flottantes ne laissent plus rien voir
+     du nuage. Les panneaux deviennent des tiroirs qui montent du bas, fermés
+     par défaut et ouverts par les deux boutons de l'en-tête : la carte reste
+     visible en entier, ce qui est le seul intérêt de l'application.
+
+     Le seuil est à 1100 et non à 1000 à cause d'un cas précis : un iPad Pro
+     12,9" en portrait fait 1024 px de large. Il passait donc en mise en page de
+     bureau, où 630 px de panneaux ne laissaient que 370 px à la carte. */
+  /* `.seg.drawer-btns` et non `.drawer-btns` seul : la règle `.seg` plus bas
+     redéfinit `display` et l'emporterait à spécificité égale. */
+  .seg.drawer-btns { display: none; }
+  @media (max-width: 1100px) {
+    .seg.drawer-btns { display: inline-flex; }
+    #controls, #details {
+      top: auto; bottom: 10px; left: 10px; right: 10px; width: auto;
+      max-height: 62vh; transform: translateY(calc(100% + 20px));
+      transition: transform .22s ease; will-change: transform;
+    }
+    #controls.open, #details.open { transform: none; }
+    #brand h1 { font-size: 15px; }
+    #brand p { display: none; }
+    #status { display: none; }
+  }
+  .drawer-btns button[aria-expanded="true"] {
+    background: rgba(57,135,229,0.22); color: var(--ink);
+  }
+
+  h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
+  h1 small { display: block; font-weight: 400; color: var(--muted); font-size: 12px;
+             letter-spacing: 0; margin-top: 2px; }
+  /* L'en-tête colle en haut du panneau qui défile : sur téléphone, le bouton de
+     fermeture disparaissait dès qu'on faisait défiler un verset un peu long, et
+     on ne savait plus comment refermer le tiroir. Fond quasi opaque, sans quoi
+     le texte défilerait visiblement dessous. */
+  .head {
+    position: sticky; top: 0; z-index: 2;
+    padding: 12px 14px; border-bottom: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--surface) 97%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  /* Le titre, le choix de disposition et la recherche forment un en-tête unique
+     au centre : ce sont les trois choses qu'on veut atteindre sans chercher.
+     Le bandeau lui-même n'intercepte pas la souris — seuls ses champs le font —
+     pour ne jamais bloquer une rotation du nuage. */
+  #brand {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 12; text-align: center; pointer-events: none;
+    width: min(760px, calc(100vw - 24px));
+  }
+  #brand h1 {
+    font-size: 17px; font-weight: 600; letter-spacing: 0.22em;
+    text-transform: uppercase; text-indent: 0.22em; margin: 0;
+    text-shadow: 0 1px 14px rgba(0,0,0,0.85);
+  }
+  #brand p { margin: 4px 0 0; font-size: 12px; color: var(--ink-2);
+             font-variant-numeric: tabular-nums;
+             text-shadow: 0 1px 14px rgba(0,0,0,0.85); }
+
+  /* Deux rangées, chacune centrée sur l'écran : la recherche tombe ainsi au
+     milieu exact, ce qu'une rangée unique partagée avec les autres commandes
+     ne permet pas. */
+  #topbar { display: flex; flex-direction: column; align-items: center;
+            gap: 8px; margin-top: 9px; }
+  .topbar-row { display: flex; justify-content: center; gap: 8px;
+                flex-wrap: wrap; }
+
+  /* Sélecteur de disposition : deux options, donc deux boutons visibles côte à
+     côte plutôt qu'une liste déroulante qui cacherait la seconde. */
+  .seg {
+    display: inline-flex; pointer-events: auto; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .seg button {
+    width: auto; border: 0; border-radius: 0; background: transparent;
+    padding: 6px 13px; color: var(--ink-2); font-size: 13px; white-space: nowrap;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] {
+    background: rgba(57,135,229,0.22); color: var(--ink); font-weight: 600;
+  }
+
+  #topsearch { pointer-events: auto; width: min(330px, 62vw); }
+  #topsearch input {
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  #search-info { text-align: center; margin: 6px 0 0;
+                 text-shadow: 0 1px 10px rgba(0,0,0,0.9); }
+
+  /* La langue ouvre le panneau : c'est le premier réglage qu'on cherche quand
+     l'interface ne s'affiche pas dans la sienne. */
+  #controls .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  #controls .head > label { display: flex; align-items: center; gap: 8px;
+                            flex: 1; min-width: 0; }
+  #controls .head > label > span {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); font-weight: 600; flex: none;
+  }
+  #controls .head select { flex: 1; min-width: 0; padding: 4px 6px; }
+  .head .close { width: auto; flex: none; padding: 3px 9px; display: none;
+                 color: var(--muted); }
+  #details .head { display: flex; align-items: flex-start; gap: 8px; }
+  #details .head h1 { flex: 1; min-width: 0; }
+  @media (max-width: 1100px) { .head .close { display: block; } }
+  .sect { padding: 11px 14px; border-bottom: 1px solid var(--hairline); }
+  .sect:last-child { border-bottom: 0; }
+  .sect > h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin: 0 0 8px; font-weight: 600;
+  }
+
+  /* `.row` sert aussi bien aux cases à cocher (label) qu'aux lignes de
+     légende (div) : la mise en forme ne doit donc pas être liée à label. */
+  .row {
+    display: flex; align-items: center; gap: 8px; padding: 3px 4px;
+    border-radius: 5px;
+  }
+  label.row { cursor: pointer; user-select: none; }
+  label.row:hover { background: rgba(255,255,255,0.05); }
+  label.row input { margin: 0; accent-color: var(--accent); flex: none; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; }
+  .row .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  select, input[type=search], button {
+    width: 100%; font: inherit; color: var(--ink);
+    background: #232322; border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  button { cursor: pointer; }
+  button:hover { background: #2c2c2b; }
+  button.ghost { background: transparent; }
+  .btn-row { display: flex; gap: 6px; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 20;
+    background: #232322; border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 13px;
+    max-width: 340px; opacity: 0; transition: opacity .1s;
+  }
+  #tooltip .ref { color: var(--ink); font-weight: 600; }
+  #tooltip .txt { color: var(--ink-2); display: block; margin-top: 2px;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* L'infobulle suppose un survol. Sur un écran tactile il n'y en a pas : le
+     doigt produit quand même un pointermove, et la bulle restait posée sur le
+     tiroir ouvert. Elle n'a de sens qu'avec une vraie souris. */
+  @media (hover: none) { #tooltip { display: none; } }
+  body.drawer-open #tooltip { display: none; }
+
+  .verse-orig {
+    font-size: 20px; line-height: 1.85; margin: 0 0 10px;
+    /* l'hébreu se lit de droite à gauche ; le grec non */
+  }
+  .verse-orig[dir=rtl] { text-align: right; }
+  .verse-fr { color: var(--ink-2); margin: 0 0 2px; }
+  .verse-alt { color: var(--muted); font-size: 13px; }
+  /* De quelle édition vient ce texte ? La question se pose devant chaque
+     traduction, et la réponse tient en une ligne discrète. */
+  .edition {
+    margin: 0 0 10px; font-size: 11px; color: var(--muted);
+    letter-spacing: 0.03em;
+  }
+  .verse-orig + .edition { text-align: inherit; }
+  .nb .known { color: #199e70; font-weight: 700; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .tag {
+    display: inline-block; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid var(--border); margin-right: 4px; font-size: 12px;
+  }
+
+  .nb { display: block; width: 100%; text-align: left; padding: 7px 8px;
+        margin-bottom: 4px; background: transparent; }
+  .nb:hover { background: rgba(255,255,255,0.06); }
+  .nb .top { display: flex; justify-content: space-between; gap: 8px; }
+  .nb .r { font-weight: 600; color: var(--ink); }
+  .nb .s { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+  .nb .t { color: var(--ink-2); font-size: 13px; display: -webkit-box;
+           -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .nb.cross .r::after {
+    content: "↔"; color: var(--warn); margin-left: 5px; font-weight: 700;
+  }
+
+  .legend-note { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+  #colophon p { margin: 0 0 3px; font-size: 11.5px; }
+  #colophon b { color: var(--ink-2); font-weight: 600; }
+
+  /* Le verset consulté peut être masqué par un filtre : son repère disparaît
+     alors du nuage, et cette ligne dit pourquoi. */
+  #det-hidden {
+    margin: 0; padding: 9px 14px; font-size: 12.5px; color: var(--warn);
+    background: rgba(250,178,25,0.07);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .axis-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .axis-row > span { font-size: 12px; width: 13px; flex: none; font-weight: 700; }
+  .axis-row.x > span { color: var(--axis-x); }
+  .axis-row.y > span { color: var(--axis-y); }
+  .axis-row.z > span { color: var(--axis-z); }
+  .axis-row select { flex: 1; min-width: 0; }
+  #theme-status.busy { color: var(--accent); }
+  #theme-status.failed { color: #e66767; }
+
+  /* ------------------------------------------------------ légende sur la carte
+     Le panneau de gauche dit comment régler la vue ; celui-ci dit ce que la vue
+     signifie, là où on la regarde. Sans lui, rien à l'écran n'explique pourquoi
+     le nuage change de forme quand on change de disposition. */
+  #mapkey {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    z-index: 3; pointer-events: none; text-align: center;
+    width: min(620px, calc(100vw - 860px));
+    text-shadow: 0 1px 10px rgba(0,0,0,0.9);
+    transition: opacity .18s;
+  }
+  /* Un tiroir ouvert recouvre la carte : l'explication n'a plus rien à
+     expliquer, et masquerait le texte du panneau. Elle revient à la fermeture. */
+  body.drawer-open #mapkey { opacity: 0; }
+  body.drawer-open #axis-labels { display: none; }
+  #mapkey .mk-h {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+    font-weight: 600; color: var(--ink-2);
+  }
+  #mapkey .mk-p { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  #mapkey .mk-p b { color: var(--ink-2); font-weight: 600; }
+  #mapkey .mk-flat { color: var(--warn); }
+  /* Plus de place au centre pour le paragraphe : on ne garde que le titre, qui
+     porte l'essentiel. La légende n'est jamais masquée — c'est elle qui répond
+     à « qu'est-ce que je regarde ». */
+  @media (max-width: 1240px) { #mapkey .mk-p { display: none; } }
+  @media (max-width: 1100px) {
+    #mapkey { width: calc(100vw - 24px); bottom: 12px; }
+    #mapkey .mk-h { font-size: 9.5px; letter-spacing: 0.07em;
+                    color: var(--muted); }
+  }
+
+  /* Étiquettes des pôles, projetées sur les extrémités des axes 3D. */
+  #axis-labels { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  #axis-labels .lab {
+    position: absolute; top: 0; left: 0; white-space: nowrap;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+    background: rgba(13,13,13,0.78); border: 1px solid var(--border);
+    opacity: 0; transition: opacity .15s;
+  }
+  #axis-labels .lab.x { color: var(--axis-x); }
+  #axis-labels .lab.y { color: var(--axis-y); }
+  #axis-labels .lab.z { color: var(--axis-z); }
+
+  /* Encart explicatif repliable */
+  details#howto { padding: 0; }
+  details#howto > summary {
+    padding: 11px 14px; cursor: pointer; user-select: none;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--ink-2); font-weight: 600; list-style: none;
+  }
+  details#howto > summary::-webkit-details-marker { display: none; }
+  details#howto > summary::after {
+    content: "▸"; float: right; color: var(--muted);
+    transition: transform .15s; display: inline-block;
+  }
+  details#howto[open] > summary::after { transform: rotate(90deg); }
+  details#howto > summary:hover { background: rgba(255,255,255,0.05); }
+  .howto { padding: 0 14px 12px; color: var(--ink-2); font-size: 13px; }
+  .howto p { margin: 0 0 9px; }
+  .howto b { color: var(--ink); font-weight: 600; }
+  .howto .split { margin-top: 13px; }
+  .pill {
+    display: inline-block; padding: 0 7px; border-radius: 999px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    font-weight: 600; vertical-align: 1px;
+  }
+  .pill.given { background: #26313d; color: #86b6ef; }
+  .pill.found { background: #3a2a1c; color: #f7b184; }
+
+  /* Fiche d'un amas sélectionné */
+  .cluster-card {
+    margin-top: 9px; padding: 9px 10px; border: 1px solid var(--border);
+    border-radius: 7px; font-size: 13px; color: var(--ink-2);
+  }
+  .cluster-card .terms { color: var(--ink); font-weight: 600; }
+  .cluster-card dl { margin: 7px 0 0; display: grid;
+                     grid-template-columns: auto 1fr; gap: 2px 10px; }
+  .cluster-card dt { color: var(--muted); font-size: 12px; }
+  .cluster-card dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .ramp { height: 9px; border-radius: 3px; margin: 2px 0 4px; }
+  .ramp-ends { display: flex; justify-content: space-between; color: var(--muted);
+               font-size: 12px; }
+  /* Centré en bas, en écho au titre : dans le coin gauche, le compteur passait
+     sous le panneau de commandes dès que celui-ci atteignait le bas de l'écran. */
+  #status { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+            color: var(--muted); font-size: 12px; text-align: center;
+            font-variant-numeric: tabular-nums; pointer-events: none;
+            text-shadow: 0 1px 10px rgba(0,0,0,0.85); }
+  @media (max-width: 900px) { #status { display: none; } }
+  #loading {
+    position: fixed; inset: 0; display: grid; place-content: center;
+    text-align: center; gap: 10px; background: var(--page); z-index: 50;
+  }
+  #loading .loadbrand { font-size: 17px; font-weight: 600; letter-spacing: 0.22em;
+                        text-transform: uppercase; text-indent: 0.22em; }
+  #loading #loadtitle { color: var(--ink-2); }
+  #loading .bar { width: 220px; height: 3px; background: var(--hairline);
+                  border-radius: 2px; overflow: hidden; }
+  #loading .bar i { display: block; height: 100%; width: 0; background: var(--accent);
+                    transition: width .2s; }
+  .kbd { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="loadbrand">Bible 3D</div>
+  <!-- Volontairement vide : app.js le remplit dans la langue retenue. Un
+       libellé écrit ici s'afficherait pendant le chargement des deux mégaoctets
+       de three.js, donc en anglais devant un lecteur francophone. Le nom du
+       projet et la barre de progression suffisent à cet instant. -->
+  <div id="loadtitle"></div>
+  <div class="bar"><i id="progress"></i></div>
+  <div class="kbd" id="loadmsg"></div>
+</div>
+
+<div id="scene"></div>
+<div id="axis-labels"></div>
+<div id="tooltip"></div>
+<div id="mapkey"><div class="mk-h"></div><div class="mk-p"></div></div>
+<div id="status"></div>
+
+<header id="brand">
+  <h1>Bible 3D</h1>
+  <p id="subtitle"></p>
+  <div id="topbar">
+    <div class="topbar-row">
+      <div class="seg" id="layout-seg" hidden>
+        <button data-layout="map" data-i18n="layout.map"></button>
+        <button data-layout="axes" data-i18n="layout.axes"></button>
+      </div>
+      <div class="seg drawer-btns">
+        <button id="open-controls" aria-expanded="false"
+                data-i18n="mob.controls"></button>
+        <button id="open-details" aria-expanded="false"
+                data-i18n="mob.details"></button>
+      </div>
+    </div>
+    <div id="topsearch">
+      <input type="search" id="search" data-i18n-ph="search.ph"
+             autocomplete="off" spellcheck="false" maxlength="120">
+      <p class="legend-note" id="search-info"></p>
+    </div>
+  </div>
+</header>
+
+<aside class="panel" id="controls">
+  <div class="head">
+    <label><span data-i18n="lang.h"></span>
+      <select id="lang-select">
+        <option value="en">English</option>
+        <option value="fr">Français</option>
+      </select>
+    </label>
+    <button class="ghost close" data-close="controls" aria-label="Fermer">✕</button>
+  </div>
+
+  <details class="sect" id="howto" open>
+    <!-- les trois premiers paragraphes changent selon la disposition : ce qui
+         est vrai de la carte UMAP est faux des axes nommés, et inversement -->
+    <summary id="howto-title"></summary>
+    <div class="howto">
+      <p id="howto-1"></p>
+      <p id="howto-2"></p>
+      <p id="howto-3"></p>
+      <p class="split" data-i18n-html="howto.split"></p>
+      <p><span class="pill given" data-i18n="pill.given"></span>
+         <span data-i18n-html="howto.given"></span></p>
+      <p><span class="pill found" data-i18n="pill.found"></span>
+         <span data-i18n-html="howto.found"></span></p>
+      <p data-i18n-html="howto.last"></p>
+    </div>
+  </details>
+
+  <div class="sect">
+    <h2 data-i18n="color.h"></h2>
+    <select id="colormode">
+      <option value="canon" data-i18n="color.canon"></option>
+      <option value="testament" data-i18n="color.testament"></option>
+      <option value="genre" data-i18n="color.genre"></option>
+      <option value="cluster" data-i18n="color.cluster"></option>
+      <option value="cross" data-i18n="color.cross"></option>
+    </select>
+    <div id="legend"></div>
+  </div>
+
+  <!-- n'apparaît qu'en disposition « axes nommés », choisie dans l'en-tête -->
+  <div class="sect" id="layout-sect" hidden>
+    <h2 data-i18n="layout.h"></h2>
+    <div id="axis-picks">
+      <label class="axis-row x"><span>X</span><select id="axis-x"></select></label>
+      <label class="axis-row y"><span>Y</span><select id="axis-y"></select></label>
+      <label class="axis-row z"><span>Z</span><select id="axis-z"></select></label>
+    </div>
+    <p class="legend-note" id="layout-note"></p>
+  </div>
+
+  <div class="sect" id="theme-sect" hidden>
+    <h2 data-i18n="theme.h"></h2>
+    <input type="search" id="theme-input" data-i18n-ph="theme.ph"
+           autocomplete="off" maxlength="200">
+    <div class="btn-row" style="margin-top:6px">
+      <button id="theme-go" data-i18n="theme.go"></button>
+      <button class="ghost" id="theme-clear" data-i18n="theme.clear"></button>
+    </div>
+    <p class="legend-note" id="theme-status"></p>
+    <div id="theme-top"></div>
+  </div>
+
+  <div class="sect">
+    <h2 data-i18n="testament.h"></h2>
+    <div id="testaments"></div>
+  </div>
+
+  <div class="sect">
+    <h2 data-i18n="genre.h"></h2>
+    <div id="genres"></div>
+    <p class="legend-note" data-i18n="genre.hint"></p>
+  </div>
+
+  <div class="sect">
+    <h2 data-i18n="cluster.h"></h2>
+    <select id="cluster-select"></select>
+    <div id="cluster-info"></div>
+  </div>
+
+  <div class="sect">
+    <h2 data-i18n="display.h"></h2>
+    <label class="row"><input type="checkbox" id="only-cross">
+      <span class="name" data-i18n="display.onlyCross"></span></label>
+    <label class="row"><input type="checkbox" id="show-xrefs">
+      <span class="name" data-i18n="display.xrefs"></span></label>
+    <label class="row"><input type="checkbox" id="spin">
+      <span class="name" data-i18n="display.spin"></span></label>
+    <div style="margin-top:8px">
+      <span class="kbd" data-i18n="display.size"></span>
+      <input type="range" id="psize" min="0.2" max="3" step="0.05" value="0.85">
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="ghost" id="reset" data-i18n="display.reset"></button>
+      <button class="ghost" id="recenter" data-i18n="display.recenter"></button>
+    </div>
+  </div>
+
+  <div class="sect" id="colophon">
+    <!-- La version est affichée, et pas seulement écrite dans le code : c'est
+         le seul moyen de savoir en un coup d'œil quelle version un navigateur
+         exécute vraiment. Un app.js resté en cache se manifeste sinon par des
+         symptômes qu'on impute au code en cours. -->
+    <p class="legend-note">© 2026 <b>Rymentz</b> · v1.0.0</p>
+    <p class="legend-note" data-i18n="colophon.licence"></p>
+    <p class="legend-note" data-i18n="colophon.sources"></p>
+  </div>
+</aside>
+
+<aside class="panel" id="details">
+  <div class="head">
+    <h1><span data-i18n="details.h"></span><small id="det-sub"></small></h1>
+    <button class="ghost close" data-close="details" aria-label="Fermer">✕</button>
+  </div>
+  <p id="det-hidden" data-i18n="details.hidden" hidden></p>
+  <div class="sect" id="det-body"></div>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

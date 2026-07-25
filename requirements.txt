@@ -1,0 +1,15 @@
+# Installation (machine sans GPU) :
+#   ./.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   ./.venv/bin/pip install -r requirements.txt
+#
+# La roue « +cpu » de torch ne vit pas sur PyPI : elle vient de l'index ci-dessus.
+# Sur une machine équipée d'un GPU NVIDIA, installer torch normalement (PyPI).
+lxml==6.1.1
+numpy==2.4.6
+pandas==3.0.5
+pyarrow==25.0.0
+scikit-learn==1.9.0
+sentence-transformers==5.6.1
+tqdm==4.69.1
+transformers==5.14.1
+umap-learn==0.5.12
