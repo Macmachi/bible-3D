@@ -303,6 +303,14 @@
   .legend-note { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
   #colophon p { margin: 0 0 3px; font-size: 11.5px; }
   #colophon b { color: var(--ink-2); font-weight: 600; }
+  /* Souligné seulement au survol : une signature ne doit pas se disputer
+     l'attention avec les réglages qui la précèdent, mais elle doit se
+     signaler comme cliquable dès qu'on la vise. */
+  .colophon-link { color: inherit; text-decoration: none; }
+  .colophon-link:hover, .colophon-link:focus-visible {
+    color: var(--ink); text-decoration: underline;
+  }
+  .colophon-link:hover b, .colophon-link:focus-visible b { color: var(--ink); }
 
   /* Le verset consulté peut être masqué par un filtre : son repère disparaît
      alors du nuage, et cette ligne dit pourquoi. */
@@ -572,7 +580,15 @@
          le seul moyen de savoir en un coup d'œil quelle version un navigateur
          exécute vraiment. Un app.js resté en cache se manifeste sinon par des
          symptômes qu'on impute au code en cours. -->
-    <p class="legend-note">© 2026 <b>Rymentz</b> · v1.1.0</p>
+    <!-- Nouvel onglet : cliquer la signature ne doit pas faire perdre une
+         exploration en cours. La politique de sécurité ne gêne pas une
+         navigation sortante — elle ne restreint que les ressources chargées
+         par la page —, et `noopener` empêche la page ouverte d'agir sur
+         celle-ci. Le référent est déjà supprimé pour tout le document. -->
+    <p class="legend-note">
+      <a class="colophon-link" href="https://github.com/Macmachi/bible-3D"
+         target="_blank" rel="noopener noreferrer">© 2026 <b>Rymentz</b> · v1.1.0</a>
+    </p>
     <p class="legend-note" data-i18n="colophon.licence"></p>
     <p class="legend-note" data-i18n="colophon.sources"></p>
   </div>
