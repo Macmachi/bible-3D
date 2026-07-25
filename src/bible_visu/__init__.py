@@ -6,4 +6,4 @@
 #: visualiseur : sans repère visible, impossible de savoir quelle version un
 #: navigateur exécute réellement — un fichier resté en cache se signale
 #: autrement par des symptômes qu'on impute à tort au code en cours.
-__version__ = "1.0.0"
+__version__ = "1.1.0"
