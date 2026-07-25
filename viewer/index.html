@@ -18,6 +18,25 @@
       content="Les 31 170 versets de la Bible placés en 3D selon leur sens :
                hébreu, grec, français et anglais.">
 <title>Bible 3D — visualisation sémantique</title>
+
+<!-- Aperçu de partage. Un site statique ne peut pas fabriquer une vignette par
+     verset, mais une seule image suffit à transformer un lien nu en carte
+     visuelle sur Reddit, Bluesky, Discord ou Slack. Les adresses doivent être
+     absolues : le robot qui les lit n'a pas de page de référence. La CSP n'y
+     fait pas obstacle, c'est lui qui récupère l'image, pas la page. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bible 3D">
+<meta property="og:title" content="Bible 3D — les 31 170 versets cartographiés par le sens">
+<meta property="og:description"
+      content="Chaque verset placé selon ce qu'il veut dire, non selon sa place
+               dans le livre. Hébreu, grec, français et anglais.">
+<meta property="og:url" content="https://macmachi.github.io/bible-3D/">
+<meta property="og:image" content="https://macmachi.github.io/bible-3D/docs/carte.png">
+<meta property="og:image:alt"
+      content="Nuage de 31 170 points colorés par Testament, un verset sélectionné
+               relié à ses voisins par le sens">
+<meta name="twitter:card" content="summary_large_image">
+
 <!-- © 2026 Rymentz — CC BY-NC 4.0 — https://github.com/Macmachi/bible-3D -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d0d0d'/%3E%3Ccircle cx='11' cy='12' r='3' fill='%233987e5'/%3E%3Ccircle cx='21' cy='19' r='3' fill='%23d95926'/%3E%3Ccircle cx='13' cy='22' r='2' fill='%233987e5'/%3E%3Ccircle cx='22' cy='10' r='2' fill='%23d95926'/%3E%3C/svg%3E">
 <style>
@@ -194,6 +213,12 @@
                  color: var(--muted); }
   #details .head { display: flex; align-items: flex-start; gap: 8px; }
   #details .head h1 { flex: 1; min-width: 0; }
+  /* Le bouton de copie reste discret : c'est une commande secondaire, elle ne
+     doit pas concurrencer la référence du verset qui la précède. */
+  #copy-link { width: auto; flex: none; padding: 3px 9px; font-size: 11.5px;
+               white-space: nowrap; color: var(--muted); }
+  #copy-link:hover { color: var(--ink); }
+  #copy-link.done { color: var(--axis-z); border-color: var(--axis-z); }
   @media (max-width: 1100px) { .head .close { display: block; } }
   .sect { padding: 11px 14px; border-bottom: 1px solid var(--hairline); }
   .sect:last-child { border-bottom: 0; }
@@ -556,6 +581,9 @@
 <aside class="panel" id="details">
   <div class="head">
     <h1><span data-i18n="details.h"></span><small id="det-sub"></small></h1>
+    <!-- Sans ce bouton la fonctionnalité n'existe pas : personne ne pense à
+         copier la barre d'adresse d'une application en plein écran. -->
+    <button class="ghost" id="copy-link" data-i18n="share.copy" hidden></button>
     <button class="ghost close" data-close="details" aria-label="Fermer">✕</button>
   </div>
   <p id="det-hidden" data-i18n="details.hidden" hidden></p>

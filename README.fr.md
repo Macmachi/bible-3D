@@ -164,6 +164,15 @@ lit Segond ou Darby —, puis deux listes distinctes :
   lien que la tradition relie aussi ;
 * **ses renvois traditionnels**, indépendants de tout calcul.
 
+**Partage.** Sélectionner un verset l'inscrit dans la barre d'adresse sous la
+forme `#v=Matt.6.12`, et un bouton *Copier le lien* se place à côté de la
+référence. Le lien porte ce que l'on regarde — le verset, la disposition, les
+trois axes, le mode de couleur — et volontairement **pas** les filtres : un lien
+qui masquerait la moitié de la Bible sans le dire laisserait croire au lecteur
+qu'il voit tout. Il ne porte pas non plus la langue, la référence OSIS étant
+neutre, ni l'angle de caméra, qui sur la carte sémantique ne signifie rien.
+Ouvrir le lien de quelqu'un ne remplace jamais vos propres réglages.
+
 **Navigation :** clic gauche glissé pour tourner, molette pour zoomer, clic droit
 glissé pour déplacer. La recherche accepte une référence (`Ésaïe 53` comme
 `Isaiah 53`), un mot français ou anglais, et le texte original — coller `אלהים`

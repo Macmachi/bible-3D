@@ -99,8 +99,13 @@ def build_payload(frame: pd.DataFrame, crossrefs) -> dict:
         # les variantes anglaises par livre ne sont pas reprises ici : le
         # visualiseur traduit genres et testaments par sa propre table, et
         # `genresEn` plus bas suffit pour la légende
+        # `osis` sert aux permaliens : une référence partagée s'écrit
+        # « Matt.6.12 » et non « 40.6.12 ». C'est le standard d'échange des
+        # références bibliques, et un lien lisible dit déjà quelque chose avant
+        # d'être ouvert. Coût : 66 chaînes courtes, ~500 octets.
         "books": [{"id": b.book_id, "name": b.name_fr, "nameEn": b.name_en,
-                   "genre": b.genre, "testament": b.testament, "lang": b.lang}
+                   "osis": b.osis, "genre": b.genre, "testament": b.testament,
+                   "lang": b.lang}
                   for b in sources.BOOKS],
         "genres": list(sources.GENRE_ORDER),
         "genresEn": [sources.GENRE_EN[g] for g in sources.GENRE_ORDER],

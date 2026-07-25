@@ -108,6 +108,9 @@ const STRINGS = {
     'details.h': 'Verset',
     'details.sub': 'clique un point dans le nuage',
     'details.hidden': 'Ce verset est masqué par les filtres en cours : son repère et ses traits ne sont plus tracés dans le nuage. Son texte reste lisible ci-dessous.',
+    'share.copy': 'Copier le lien',
+    'share.copied': 'Lien copié',
+    'share.failed': 'Copie refusée',
     'mapkey.map.h': 'Carte sémantique — la position vient du sens',
     'mapkey.map.p': 'Chaque point est un verset. Deux points côte à côte parlent de la même chose, même à mille pages d\'écart. <b>Les directions, elles, ne veulent rien dire</b> : ni haut, ni bas, ni gauche — seule la proximité compte. Le nuage a la forme irrégulière que le texte lui donne.',
     'mapkey.axes.h': 'Axes thématiques — ici, une position se lit',
@@ -202,6 +205,9 @@ const STRINGS = {
     'details.h': 'Verse',
     'details.sub': 'click a dot in the cloud',
     'details.hidden': 'This verse is hidden by the current filters: its marker and links are no longer drawn in the cloud. Its text remains readable below.',
+    'share.copy': 'Copy link',
+    'share.copied': 'Link copied',
+    'share.failed': 'Copy refused',
     'mapkey.map.h': 'Semantic map — position comes from meaning',
     'mapkey.map.p': 'Each dot is a verse. Two dots side by side are about the same thing, even a thousand pages apart. <b>The directions themselves mean nothing</b>: not up, not down, not left — only proximity counts. The cloud has whatever shape the text gives it.',
     'mapkey.axes.h': 'Thematic axes — here a position can be read',
@@ -699,6 +705,123 @@ function restoreState() {
   }
 }
 
+/* ------------------------------------------------------------- permaliens */
+/* Un lien partagé encode ce que l'on regarde, jamais où se trouve la caméra.
+   Sur la carte sémantique les directions ne signifient rien : un angle de vue
+   n'est qu'une trace du chemin parcouru, et cinq flottants d'orientation dans
+   l'URL n'apprendraient rien à personne. On encode donc l'intention — quel
+   verset, quelle disposition, quels axes, quel mode de couleur — et
+   l'application recompose la vue.
+                                                                             |
+   Ce qui est délibérément ABSENT :
+                                                                             |
+   * les filtres (testaments, genres, amas). Ils *masquent* des versets. Un
+     lien qui cache la moitié de la Bible sans le dire ferait croire au
+     destinataire qu'il voit tout ; rien à l'écran ne lui signalerait que la
+     carte reçue est tronquée. On ne partage que du présentationnel ;
+   * la langue. La référence OSIS est neutre : je partage `Matt.6.12`, vous le
+     lisez en français si c'est votre langue. Imposer la sienne serait une
+     régression pour celui qui reçoit ;
+   * la recherche par thème. Elle exige `serve.py` et le modèle local ; le lien
+     serait mort pour tout le monde sauf son auteur. */
+const OSIS_BY_ID = new Map(data.books.map(b => [b.id, b.osis]));
+const ID_BY_OSIS = new Map(data.books.map(b => [b.osis.toLowerCase(), b.id]));
+
+const indexByRef = new Map();
+for (let i = 0; i < N; i++) {
+  indexByRef.set(`${data.bookId[i]}.${data.chapter[i]}.${data.verse[i]}`, i);
+}
+
+const osisRef = i =>
+  `${OSIS_BY_ID.get(data.bookId[i])}.${data.chapter[i]}.${data.verse[i]}`;
+
+/** Résout « Matt.6.12 » vers un indice, ou -1. Le fragment d'URL est une
+ *  entrée non fiable comme une autre : tout est validé, rien n'est supposé. */
+function indexOfOsis(ref) {
+  const parts = /^([0-9A-Za-z]+)\.(\d+)\.(\d+)$/.exec(String(ref).trim());
+  if (!parts) return -1;
+  const book = ID_BY_OSIS.get(parts[1].toLowerCase());
+  if (book === undefined) return -1;
+  const hit = indexByRef.get(`${book}.${Number(parts[2])}.${Number(parts[3])}`);
+  return hit === undefined ? -1 : hit;
+}
+
+const COLOR_MODES = new Set(['canon', 'testament', 'genre', 'cluster', 'cross']);
+
+function permalink() {
+  const parts = [];
+  if (state.selected >= 0) parts.push(`v=${osisRef(state.selected)}`);
+  if (state.layout === 'axes' && AXES.length >= 3) {
+    parts.push('l=axes');
+    parts.push(`a=${state.axisPick.map(i => AXES[i].id).join(',')}`);
+  }
+  if (state.colorMode !== 'canon') parts.push(`c=${state.colorMode}`);
+  return parts.join('&');
+}
+
+/** Écrit l'état dans le fragment.
+ *
+ *  `replaceState` et non `pushState` : l'URL suit la sélection en continu, et
+ *  empiler une entrée d'historique par verset cliqué rendrait le bouton Retour
+ *  inutilisable au bout de quelques minutes d'exploration. */
+function writePermalink() {
+  const hash = permalink();
+  if (location.hash.replace(/^#/, '') === hash) return;
+  history.replaceState(null, '',
+    location.pathname + location.search + (hash ? `#${hash}` : ''));
+}
+
+/** Lit le fragment. Ne renvoie que les clefs reconnues et valides : une clef
+ *  inconnue est ignorée, une valeur invalide est ignorée, et un fragment
+ *  entièrement malformé ouvre la carte par défaut. Une fois des liens en
+ *  circulation, le format est un contrat — il doit se dégrader, jamais rompre. */
+function readPermalink() {
+  const raw = location.hash.replace(/^#/, '');
+  if (!raw) return null;
+
+  const found = new Map();
+  for (const chunk of raw.split('&')) {
+    const cut = chunk.indexOf('=');
+    if (cut > 0) {
+      try { found.set(chunk.slice(0, cut), decodeURIComponent(chunk.slice(cut + 1))); }
+      catch { /* échappement invalide : on ignore ce morceau */ }
+    }
+  }
+
+  const out = {};
+  if (COLOR_MODES.has(found.get('c'))) out.colorMode = found.get('c');
+  if (found.get('l') === 'map') out.layout = 'map';
+  if (found.get('l') === 'axes' && AXES.length >= 3) out.layout = 'axes';
+
+  const axes = found.get('a');
+  if (axes) {
+    const picks = axes.split(',').map(id => AXES.findIndex(a => a.id === id));
+    if (picks.length === 3 && picks.every(i => i >= 0)) out.axisPick = picks;
+  }
+
+  const verse = found.get('v');
+  if (verse) {
+    const i = indexOfOsis(verse);
+    if (i >= 0) out.selected = i;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Applique au réglage courant ce qu'un lien décrit, et rien de plus.
+ *
+ *  Volontairement sans `saveState()` : ouvrir le lien de quelqu'un ne doit pas
+ *  remplacer durablement ses propres réglages. Un lien partagé est une lentille
+ *  posée le temps d'une visite ; la première action de l'utilisateur enregistre
+ *  ensuite normalement. */
+function applyShared(shared) {
+  if (shared.colorMode) {
+    state.colorMode = shared.colorMode;
+    el('colormode').value = shared.colorMode;
+  }
+  if (shared.axisPick) state.axisPick = shared.axisPick;
+  if (shared.layout) state.layout = shared.layout;
+}
+
 const visible = new Uint8Array(N).fill(1);
 const matches = new Uint8Array(N).fill(1);
 
@@ -1030,6 +1153,8 @@ function showDetails(i) {
 
   halo.position.fromArray(positions, i * 3);
   syncSelection();
+  el('copy-link').hidden = false;
+  writePermalink();
 }
 
 /** Accorde le repère 3D à l'état des filtres.
@@ -1079,10 +1204,19 @@ function drawLinks(i) {
   links.visible = targets.length > 0;
 }
 
-function flyTo(i) {
+/* Direction d'approche fixe, utilisée quand on arrive par un lien partagé.
+   En navigation normale, on garde l'orientation courante : l'utilisateur vient
+   de quelque part et perdrait ses repères si la caméra sautait. Mais deux
+   personnes ouvrant la même URL doivent voir la même image, sinon le lien ne
+   partage pas une vue — il partage une loterie. */
+const CANONICAL_VIEW = new THREE.Vector3(0.35, 0.25, 1).normalize();
+
+function flyTo(i, canonical = false) {
   const target = new THREE.Vector3().fromArray(positions, i * 3);
-  const offset = camera.position.clone().sub(controls.target)
-    .normalize().multiplyScalar(48);
+  const offset = (canonical
+    ? CANONICAL_VIEW.clone()
+    : camera.position.clone().sub(controls.target).normalize())
+    .multiplyScalar(48);
   const from = { t: 0 };
   const startTarget = controls.target.clone();
   const startCam = camera.position.clone();
@@ -1162,6 +1296,7 @@ el('colormode').addEventListener('change', event => {
   state.colorMode = event.target.value;
   renderLegend();
   refresh();
+  writePermalink();
 });
 el('testaments').addEventListener('change', event => {
   const key = event.target.dataset.testament;
@@ -1503,6 +1638,7 @@ function renderAxisPickers() {
 }
 
 function applyLayout(animate = true) {
+  writePermalink();
   const useAxes = state.layout === 'axes' && axisScores;
   // le choix se fait dans l'en-tête ; le panneau ne montre les trois sélecteurs
   // d'axes que lorsqu'ils servent à quelque chose
@@ -1650,6 +1786,50 @@ for (const [slot, id] of [[0, 'axis-x'], [1, 'axis-y'], [2, 'axis-z']]) {
   });
 }
 
+/* ------------------------------------------------------- copie du permalien */
+el('copy-link').addEventListener('click', async () => {
+  const button = el('copy-link');
+  const url = location.href;
+  let ok = false;
+  try {
+    // navigator.clipboard exige un contexte sécurisé : présent sur GitHub Pages
+    // (HTTPS) et sur 127.0.0.1, absent d'un http:// distant. D'où le repli.
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      ok = true;
+    } else {
+      const field = document.createElement('textarea');
+      field.value = url;
+      field.setAttribute('readonly', '');
+      field.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.append(field);
+      field.select();
+      ok = document.execCommand('copy');
+      field.remove();
+    }
+  } catch { ok = false; }
+
+  // Un bouton qui ne répond rien laisse croire qu'il n'a pas été pressé.
+  button.textContent = t(ok ? 'share.copied' : 'share.failed');
+  button.classList.toggle('done', ok);
+  setTimeout(() => {
+    button.textContent = t('share.copy');
+    button.classList.remove('done');
+  }, 1800);
+});
+
+/* L'URL peut changer sans nous : bouton Précédent, lien collé dans la barre
+   d'adresse, ancre cliquée. On réapplique alors ce que le fragment décrit. */
+addEventListener('hashchange', () => {
+  const shared = readPermalink();
+  if (!shared) return;
+  applyShared(shared);
+  if (shared.selected >= 0 && shared.selected !== state.selected) {
+    showDetails(shared.selected);
+    flyTo(shared.selected, true);
+  }
+});
+
 /* ------------------------------------------------------- application langue */
 /** Renseigne tous les éléments porteurs d'un attribut `data-i18n*`. */
 function applyStaticText() {
@@ -1701,6 +1881,12 @@ function setLanguage(code) {
 /* ------------------------------------------------------------------- départ */
 restoreState();
 
+/* Un lien partagé passe après les réglages mémorisés et l'emporte sur eux —
+   mais seulement sur les clefs qu'il mentionne. Le reste de l'expérience du
+   destinataire lui appartient. */
+const sharedOnLoad = readPermalink();
+if (sharedOnLoad) applyShared(sharedOnLoad);
+
 el('colormode').value = state.colorMode;
 el('only-cross').checked = state.onlyCross;
 el('show-xrefs').checked = state.showXrefs;
@@ -1743,6 +1929,16 @@ for (const id of ['colormode', 'testaments', 'genres', 'cluster-select', 'only-c
 renderAll();
 setProgress(1, 'ready');
 el('loading').remove();
+
+/* Le verset d'un lien s'ouvre après le premier rendu : la scène doit exister
+   pour qu'on puisse y voler. Sur écran étroit on déplie aussi le tiroir — un
+   lien vers un verset dont on ne verrait pas le texte ne tiendrait qu'à moitié
+   sa promesse. */
+if (sharedOnLoad && sharedOnLoad.selected >= 0) {
+  showDetails(sharedOnLoad.selected);
+  flyTo(sharedOnLoad.selected, true);
+  if (isNarrow()) openDrawer('details');
+}
 
 renderer.setAnimationLoop(() => {
   controls.update();

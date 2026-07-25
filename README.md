@@ -160,6 +160,15 @@ Segond or Darby — then two separate lists:
   that tradition also draws;
 * **its traditional cross-references**, independent of any computation.
 
+**Sharing.** Selecting a verse writes it into the address bar as
+`#v=Matt.6.12`, and a *Copy link* button sits next to the reference. The link
+carries what you are looking at — the verse, the layout, the three axes, the
+colour mode — and deliberately **not** the filters: a link that quietly hid half
+the Bible would leave the reader believing they saw all of it. It does not carry
+your language either, since the OSIS reference is neutral, nor your camera
+angle, which on the semantic map means nothing anyway. Opening someone's link
+never overwrites your own saved settings.
+
 **Navigation:** left-drag to rotate, wheel to zoom, right-drag to pan. Search
 accepts a reference (`Ésaïe 53` as well as `Isaiah 53`), a French or English
 word, and the original text — paste `אלהים` or `λόγος` to isolate every verse
