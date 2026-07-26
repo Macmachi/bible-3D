@@ -41,69 +41,100 @@ class ThemeEngine:
     Si `sentence-transformers` n'est pas installé, ou si les vecteurs du corpus
     manquent, le service se déclare simplement indisponible : le reste du
     visualiseur continue de fonctionner sans lui.
+
+    Une similarité n'a de sens que dans l'espace où elle est mesurée. Le
+    visualiseur pouvant afficher deux cartes, chacune calculée sur son texte,
+    la requête est comparée aux vecteurs de la carte regardée — et non à ceux
+    du français quoi qu'il arrive, ce qui colorierait la carte anglaise avec
+    des ressemblances établies ailleurs.
     """
 
     #: Une requête plus longue n'apporte rien et n'a pas à être encodée.
     MAX_QUERY = 200
 
+    #: Fichier de vecteurs par base, tel que `bible_visu.embed` les nomme.
+    FILES = {"fr": "embeddings", "en": "embeddings_en"}
+
     def __init__(self, root: Path) -> None:
         self.root = root
         self._lock = threading.Lock()
         self._model = None
-        self._vectors = None
+        self._vectors: dict[str, object] = {}
         self._model_name = None
         self.error: str | None = None
-        meta_path = root / "data" / "processed" / "embeddings.json"
-        vectors_path = root / "data" / "processed" / "embeddings.npy"
-        if not (meta_path.exists() and vectors_path.exists()):
+        self.bases: list[str] = []
+
+        processed = root / "data" / "processed"
+        for basis, stem in self.FILES.items():
+            meta_path = processed / f"{stem}.json"
+            vectors_path = processed / f"{stem}.npy"
+            if not (meta_path.exists() and vectors_path.exists()):
+                continue
+            try:
+                name = json.loads(meta_path.read_text(encoding="utf-8"))["model"]
+            except (OSError, ValueError, KeyError) as exc:
+                # Le détail va sur la console, pas dans la réponse HTTP : le
+                # message d'une OSError contient le chemin absolu du fichier,
+                # donc le nom d'utilisateur et toute l'arborescence au-dessus
+                # du projet.
+                print(f"  {meta_path.name} illisible : {exc}", file=sys.stderr)
+                continue
+            # Un seul modèle est chargé en mémoire : deux bases encodées par
+            # deux modèles différents ne se compareraient de toute façon pas.
+            if self._model_name is None:
+                self._model_name = name
+            elif name != self._model_name:
+                print(f"  base « {basis} » encodée par {name}, ignorée",
+                      file=sys.stderr)
+                continue
+            self.bases.append(basis)
+
+        if not self.bases:
             self.error = "vecteurs du corpus absents (lance `bible_visu.embed`)"
-            return
-        try:
-            self._model_name = json.loads(
-                meta_path.read_text(encoding="utf-8"))["model"]
-        except (OSError, ValueError, KeyError) as exc:
-            # Le détail va sur la console, pas dans la réponse HTTP : le message
-            # d'une OSError contient le chemin absolu du fichier, donc le nom
-            # d'utilisateur et toute l'arborescence au-dessus du projet.
-            print(f"  embeddings.json illisible : {exc}", file=sys.stderr)
-            self.error = "métadonnées d'encodage illisibles (relance `embed`)"
 
     @property
     def available(self) -> bool:
         return self.error is None
 
-    def _ensure_loaded(self) -> None:
-        if self._model is not None:
-            return
-        # tout reste dans le projet, comme pour le reste du pipeline
-        models = self.root / "data" / "models"
-        os.environ.setdefault("HF_HOME", str(models))
-        os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(models))
-        import numpy
-        from sentence_transformers import SentenceTransformer
+    def _ensure_loaded(self, basis: str) -> None:
+        if self._model is None:
+            # tout reste dans le projet, comme pour le reste du pipeline
+            models = self.root / "data" / "models"
+            os.environ.setdefault("HF_HOME", str(models))
+            os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(models))
+            from sentence_transformers import SentenceTransformer
 
-        print(f"  chargement du modèle {self._model_name}… (une seule fois)")
-        started = time.perf_counter()
-        self._model = SentenceTransformer(self._model_name,
-                                          cache_folder=str(models))
-        self._vectors = numpy.load(
-            self.root / "data" / "processed" / "embeddings.npy")
-        print(f"  prêt en {time.perf_counter() - started:.0f} s "
-              f"({len(self._vectors)} versets)")
+            print(f"  chargement du modèle {self._model_name}… (une seule fois)")
+            started = time.perf_counter()
+            self._model = SentenceTransformer(self._model_name,
+                                              cache_folder=str(models))
+            print(f"  modèle prêt en {time.perf_counter() - started:.0f} s")
 
-    def similarities(self, query: str) -> bytes:
+        if basis not in self._vectors:
+            import numpy
+
+            path = self.root / "data" / "processed" / f"{self.FILES[basis]}.npy"
+            started = time.perf_counter()
+            self._vectors[basis] = numpy.load(path)
+            print(f"  vecteurs « {basis} » chargés en "
+                  f"{time.perf_counter() - started:.1f} s "
+                  f"({len(self._vectors[basis])} versets)")
+
+    def similarities(self, query: str, basis: str = "fr") -> bytes:
         """Renvoie un Float32Array : une similarité cosinus par verset."""
         import numpy
 
+        if basis not in self.bases:
+            raise KeyError(basis)
         with self._lock:
-            self._ensure_loaded()
+            self._ensure_loaded(basis)
             # même préfixe et même normalisation que lors de l'encodage du
             # corpus, faute de quoi les similarités ne seraient pas comparables
             payload = (f"query: {query}"
                        if "e5" in (self._model_name or "").lower() else query)
             vector = self._model.encode([payload], convert_to_numpy=True,
                                         normalize_embeddings=True)[0]
-            scores = (self._vectors @ vector).astype(numpy.float32)
+            scores = (self._vectors[basis] @ vector).astype(numpy.float32)
         return scores.tobytes()
 
 
@@ -126,6 +157,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if parsed.path == "/api/status":
             engine = self.theme_engine
             self.send_json({"theme": bool(engine and engine.available),
+                            "bases": engine.bases if engine else [],
                             "reason": engine.error if engine else "non configuré"})
             return
         super().do_GET()
@@ -154,9 +186,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"error": f"requête trop longue "
                                      f"(max {ThemeEngine.MAX_QUERY} caractères)"}, 413)
             return
+        # Une base inconnue n'est pas rattrapée en silence : répondre avec les
+        # similarités du français ferait colorier la carte anglaise par des
+        # ressemblances mesurées ailleurs, sans que rien ne le signale.
+        basis = (params.get("basis") or ["fr"])[0].strip() or "fr"
+        if basis not in engine.bases:
+            self.send_json({"error": f"base « {basis} » non encodée"}, 404)
+            return
 
         try:
-            payload = engine.similarities(query)
+            payload = engine.similarities(query, basis)
         except Exception as exc:  # noqa: BLE001 — on ne tue pas le serveur
             # Même règle que plus haut : la trace complète reste locale. Une
             # erreur de chargement de modèle cite le dossier de cache, et ce

@@ -226,14 +226,31 @@ def _self_check() -> None:
 _self_check()
 
 
-def build(model_name: str, batch_size: int = 16) -> dict:
+def build(model_name: str, batch_size: int = 16, basis: str = "fr") -> dict:
+    """Projette le corpus sur les axes ancrés.
+
+    Les phrases d'ancrage restent en français quelle que soit la base, et ce
+    n'est pas une négligence. Un axe est la *différence* de ses deux pôles :
+    cette soustraction annule ce que les deux ont en commun, à commencer par la
+    langue dans laquelle ils sont écrits. Ce qui reste est une direction de
+    sens, que le modèle multilingue place au même endroit qu'elle soit atteinte
+    par le français ou par l'anglais. Le contrôle reste le même qu'ailleurs :
+    ``report()`` affiche les versets extrêmes, et c'est en les lisant qu'on
+    juge, non en croyant l'argument.
+    """
     from .embed import E5_PREFIX, needs_e5_prefix
     from sentence_transformers import SentenceTransformer
 
     frame = pd.read_parquet(paths.VERSES)
-    embeddings = np.load(paths.EMBEDDINGS)
+    embeddings_path = paths.embeddings(basis)
+    if not embeddings_path.exists():
+        raise SystemExit(
+            f"{embeddings_path.name} absent. Lance d'abord "
+            f"`python -m bible_visu.embed --basis {basis}`.")
+    embeddings = np.load(embeddings_path)
     if len(frame) != len(embeddings):
-        raise SystemExit("verses.parquet et embeddings.npy sont désynchronisés.")
+        raise SystemExit(
+            f"verses.parquet et {embeddings_path.name} sont désynchronisés.")
 
     print(f"Modèle : {model_name}")
     model = SentenceTransformer(model_name, cache_folder=str(paths.MODELS))
@@ -271,8 +288,11 @@ def build(model_name: str, batch_size: int = 16) -> dict:
     return {"frame": frame, "scores": scores}
 
 
-def report(frame: pd.DataFrame, scores: np.ndarray, top: int = 4) -> None:
+def report(frame: pd.DataFrame, scores: np.ndarray, top: int = 4,
+           basis: str = "fr") -> None:
     """Affiche les versets extrêmes de chaque pôle — le contrôle qui compte."""
+    column_name = paths.BASIS_COLUMN[basis]
+    texts = frame[column_name].fillna("")
     for column, axis in enumerate(AXES):
         values = scores[:, column]
         print(f"\n{'═' * 76}\n{axis['fr']}")
@@ -281,7 +301,7 @@ def report(frame: pd.DataFrame, scores: np.ndarray, top: int = 4) -> None:
             print(f"\n  ── pôle « {label} » ──")
             for i in order[:top]:
                 print(f"    {values[i]:+.2f}  {frame.label[i]:<24} "
-                      f"{frame.text_fr[i][:64]}")
+                      f"{texts.iloc[i][:64]}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -291,21 +311,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--top", type=int, default=4,
                         help="versets extrêmes affichés par pôle")
+    parser.add_argument("--basis", default="fr", choices=list(paths.BASES),
+                        help="texte de référence de la carte (défaut : fr)")
     args = parser.parse_args(argv)
 
     paths.ensure_dirs()
-    built = build(args.model)
+    built = build(args.model, basis=args.basis)
     frame, scores = built["frame"], built["scores"]
 
-    np.savez_compressed(paths.AXES, scores=scores,
+    out = paths.axes(args.basis)
+    np.savez_compressed(out, scores=scores,
                         ids=np.array([a["id"] for a in AXES]))
     meta = [{k: a[k] for k in ("id", "fr", "en", "neg_fr", "pos_fr",
                                "neg_en", "pos_en")} for a in AXES]
-    paths.AXES.with_suffix(".json").write_text(
+    out.with_suffix(".json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    report(frame, scores, args.top)
-    print(f"\n{scores.shape[1]} axes × {scores.shape[0]} versets -> {paths.AXES}")
+    report(frame, scores, args.top, basis=args.basis)
+    print(f"\n{scores.shape[1]} axes × {scores.shape[0]} versets -> {out}")
     print("\nLis les versets ci-dessus : si un pôle ne ressemble pas à son "
           "intitulé,\nl'axe est mal ancré — corrige ses phrases dans axes.py.")
     return 0

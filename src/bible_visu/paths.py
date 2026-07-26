@@ -36,6 +36,44 @@ ALL_DIRS = (
     RAW_HEBREW, RAW_GREEK, RAW_TRANSLATIONS, PROCESSED, VIEWER_DATA, MODELS,
 )
 
+#: Les deux textes sur lesquels une carte peut être calculée. Ce ne sont pas
+#: deux versions d'une même carte : deux versets voisins chez Segond ne le sont
+#: pas forcément chez la World English Bible, et c'est le sujet.
+BASES = ("fr", "en")
+
+#: Texte de référence pour chaque base, et colonne du corpus qui le porte.
+BASIS_COLUMN = {"fr": "text_fr", "en": "text_en"}
+
+
+def for_basis(path: Path, basis: str) -> Path:
+    """``embeddings.npy`` pour le français, ``embeddings_en.npy`` pour l'anglais.
+
+    Le français ne prend pas de suffixe : c'est la carte d'origine, et lui en
+    donner un renommerait des fichiers déjà publiés, déjà référencés dans le
+    README et déjà en cache chez les visiteurs.
+    """
+    if basis not in BASES:
+        raise ValueError(f"base inconnue : {basis!r} (attendu {BASES})")
+    if basis == "fr":
+        return path
+    return path.with_name(f"{path.stem}_{basis}{path.suffix}")
+
+
+def embeddings(basis: str = "fr") -> Path:
+    return for_basis(EMBEDDINGS, basis)
+
+
+def embeddings_meta(basis: str = "fr") -> Path:
+    return for_basis(EMBEDDINGS_META, basis)
+
+
+def points(basis: str = "fr") -> Path:
+    return for_basis(POINTS, basis)
+
+
+def axes(basis: str = "fr") -> Path:
+    return for_basis(AXES, basis)
+
 
 def ensure_dirs() -> None:
     for directory in ALL_DIRS:

@@ -54,6 +54,45 @@ STOPWORDS_FR = {
     "etc", "dit", "dire", "ait", "aient", "eut", "eurent", "firent", "furent",
 }
 
+#: Mots-outils anglais, pour les amas de la carte calculée sur la World English
+#: Bible. Le motif de tokenisation exigeant trois lettres, « of », « to », « in »
+#: et leurs pareils sont déjà écartés et n'ont pas à figurer ici. Les noms
+#: omniprésents — « God », « Yahweh », « Israel » — n'y sont pas non plus : le
+#: seuil ``max_df`` du vectoriseur écarte de lui-même ce qui apparaît dans plus
+#: de six amas sur dix, et les inscrire ici reviendrait à décider d'avance ce
+#: que le texte a le droit de dire.
+STOPWORDS_EN = {
+    "about", "above", "after", "again", "against", "all", "also", "although",
+    "always", "among", "and", "another", "any", "anyone", "are", "aren", "around",
+    "away", "back", "because", "been", "before", "behind", "being", "beside",
+    "besides", "between", "beyond", "both", "but", "can", "cannot", "come",
+    "comes", "coming", "concerning", "could", "did", "does", "doesn", "doing",
+    "done", "don", "down", "during", "each", "either", "else", "etc", "even",
+    "ever", "every", "everyone", "except", "few", "for", "from", "further",
+    "gave", "get", "give", "given", "gives", "going", "gone", "got", "had",
+    "has", "hasn", "have", "haven", "having", "hence", "her", "here", "hers",
+    "herself", "him", "himself", "his", "how", "however", "into", "isn", "its",
+    "itself", "just", "least", "less", "let", "like", "made", "make", "makes",
+    "making", "many", "may", "might", "mine", "more", "most", "much", "must",
+    "myself", "neither", "never", "nevertheless", "nor", "not", "nothing", "now",
+    "off", "once", "one", "only", "onto", "other", "others", "ought", "our",
+    "ours", "ourselves", "out", "over", "own", "perhaps", "put", "rather",
+    "said", "same", "saw", "say", "saying", "says", "see", "seen", "shall",
+    "she", "should", "since", "some", "someone", "something", "still", "such",
+    "take", "taken", "takes", "than", "that", "the", "their", "theirs", "them",
+    "themselves", "then", "there", "therefore", "these", "they", "thing",
+    "things", "this", "those", "though", "through", "throughout", "thus", "too",
+    "took", "toward", "towards", "under", "unless", "until", "unto", "upon",
+    "very", "was", "wasn", "went", "were", "weren", "what", "whatever", "when",
+    "whenever", "where", "whereas", "wherever", "whether", "which", "while",
+    "who", "whoever", "whom", "whose", "why", "will", "with", "within",
+    "without", "won", "would", "yet", "you", "your", "yours", "yourself",
+    "yourselves",
+}
+
+#: Le nommage des amas se fait dans la langue qui a servi au calcul.
+STOPWORDS = {"fr": STOPWORDS_FR, "en": STOPWORDS_EN}
+
 TOKEN_RE = re.compile(r"(?u)\b[a-zà-öø-ÿ]{3,}\b")
 
 
@@ -100,7 +139,7 @@ def find_clusters(coords3d: np.ndarray, min_cluster_size: int) -> np.ndarray:
 
 
 def name_clusters(texts: list[str], labels: np.ndarray,
-                  top_n: int = 4) -> dict[int, str]:
+                  top_n: int = 4, basis: str = "fr") -> dict[int, str]:
     """Nomme chaque amas par ses termes les plus caractéristiques (TF-IDF)."""
     from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -115,7 +154,7 @@ def name_clusters(texts: list[str], labels: np.ndarray,
     vectorizer = TfidfVectorizer(
         lowercase=True,
         token_pattern=TOKEN_RE.pattern,
-        stop_words=sorted(STOPWORDS_FR),
+        stop_words=sorted(STOPWORDS[basis]),
         max_df=0.6,
         sublinear_tf=True,
     )
@@ -174,16 +213,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--abtt-layout", type=int, default=0,
                         help="débruitage ABTT appliqué à la disposition 3D — "
                              "déconseillé, cela efface les amas")
+    parser.add_argument("--basis", default="fr", choices=list(paths.BASES),
+                        help="texte de référence de la carte (défaut : fr)")
     args = parser.parse_args(argv)
 
     frame = pd.read_parquet(paths.VERSES)
-    vectors = np.load(paths.EMBEDDINGS)
+    vectors_path = paths.embeddings(args.basis)
+    if not vectors_path.exists():
+        raise SystemExit(
+            f"{vectors_path.name} absent. Lance d'abord "
+            f"`python -m bible_visu.embed --basis {args.basis}`.")
+    vectors = np.load(vectors_path)
     if len(frame) != len(vectors):
         raise SystemExit(
             f"Incohérence : {len(frame)} versets mais {len(vectors)} vecteurs. "
-            "Relance `python -m bible_visu.embed`.")
-    meta = json.loads(paths.EMBEDDINGS_META.read_text(encoding="utf-8"))
-    print(f"{len(frame)} versets, vecteurs {vectors.shape} ({meta['model']})\n")
+            f"Relance `python -m bible_visu.embed --basis {args.basis}`.")
+    meta = json.loads(paths.embeddings_meta(args.basis).read_text(encoding="utf-8"))
+    print(f"{len(frame)} versets, vecteurs {vectors.shape} "
+          f"({meta['model']}, base {args.basis})\n")
 
     # Deux usages, deux espaces — c'est un résultat de mesure, pas une élégance.
     #
@@ -221,7 +268,11 @@ def main(argv: list[str] | None = None) -> int:
     coords *= 100.0 / np.percentile(np.linalg.norm(coords, axis=1), 99)
 
     labels = find_clusters(coords, args.min_cluster_size)
-    names = name_clusters(frame["text_fr"].tolist(), labels)
+    # Les libellés sont extraits du texte qui a servi au calcul : une carte
+    # anglaise nommée en français décrirait des amas qu'elle n'a pas formés.
+    labelled_from = paths.BASIS_COLUMN[args.basis]
+    names = name_clusters(frame[labelled_from].fillna("").tolist(), labels,
+                          basis=args.basis)
 
     print(f"  Voisinage sémantique (k={args.neighbours})…")
     neighbour_idx, neighbour_sim = nearest_neighbours(knn_vectors, args.neighbours)
@@ -238,8 +289,9 @@ def main(argv: list[str] | None = None) -> int:
         for i in range(len(frame))
     ]
 
-    frame.to_parquet(paths.POINTS, index=False)
-    print(f"\n{len(frame)} points -> {paths.POINTS}")
+    points_path = paths.points(args.basis)
+    frame.to_parquet(points_path, index=False)
+    print(f"\n{len(frame)} points -> {points_path}")
 
     print("\nAmas les plus peuplés :")
     sizes = frame.loc[frame.cluster >= 0].groupby("cluster", observed=True).size()

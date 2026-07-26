@@ -15,16 +15,23 @@ Four texts side by side: **Masoretic Hebrew** (Westminster Leningrad Codex),
 **Greek** (SBLGNT), **French** (Louis Segond 1910) and **English** (World English
 Bible). The interface is available in French and English.
 
-> **The geometry is computed on the French text — Louis Segond 1910.** The
-> Hebrew and Greek are aligned verse by verse, stored, and displayed with every
-> point, but they are *not* what places it. No sentence-embedding model is
+> **The geometry is computed on a translation, and you choose which one.** Two
+> maps are shipped: one computed on **Louis Segond 1910**, one on the **World
+> English Bible**. They are not two versions of one map. Two verses side by side
+> in Segond can sit far apart in the WEB, their nearest relatives differ, and
+> the clusters are not the same groups. That gap is the subject, not a defect. A
+> selector in the header switches between them, and the on-screen legend always
+> names the text in force.
+>
+> The Hebrew and Greek are aligned verse by verse, stored, and displayed with
+> every point, but they are *not* what places it. No sentence-embedding model is
 > trained on Biblical Hebrew or Koine Greek; running one on the Masoretic text
 > would produce a convincing-looking cloud whose groupings mean nothing.
 >
 > This is the single most important thing to know before reading the map: what
-> you see is meaning **as rendered by Segond**, not a truth independent of the
-> translator. The reasoning, and how to test it yourself, is in
-> [Meaning is computed on the French, not the Hebrew](#1-meaning-is-computed-on-the-french-not-the-hebrew).
+> you see is meaning **as rendered by one translator**, not a truth independent
+> of them. The reasoning, and how to test it yourself, is in
+> [Meaning is computed on a translation, not on the Hebrew](#1-meaning-is-computed-on-a-translation-not-on-the-hebrew).
 
 The machine is given no prior knowledge: it knows nothing of books, authors,
 genres or chronology. It sees text and nothing else. Every grouping you can see
@@ -79,6 +86,24 @@ export PYTHONPATH=src
 ./.venv/bin/python serve.py                 # opens http://127.0.0.1:8000
 ```
 
+That builds the Segond map. The English one is the same three steps with
+`--basis en`, then a single re-export that writes both:
+
+```bash
+./.venv/bin/python -m bible_visu.embed   --basis en   # ~75 min, as long as the first
+./.venv/bin/python -m bible_visu.project --basis en
+./.venv/bin/python -m bible_visu.axes    --basis en
+./.venv/bin/python -m bible_visu.export                # picks up every basis present
+```
+
+`--basis` decides both the column encoded and the names of the files written, so
+the two maps never overwrite each other. The French files keep the names they
+have always had; the English ones sit beside them with an `_en` suffix. Skip
+this and everything still works: the viewer offers one map and hides the
+selector. `crossrefs` also takes `--basis`, but only to re-run the comparison
+with tradition against the other map — the cross-references themselves are
+indexed by reference and belong to neither.
+
 Everything stays inside the project folder, **model cache included**
 (`data/models/`, ~3 GB). Nothing is written to `~/.cache`, nothing is installed
 system-wide.
@@ -108,19 +133,40 @@ For a first exploration, `--model intfloat/multilingual-e5-base` already gives a
 very readable map in a third of the time. The remaining stages are quick:
 projection ~5 min, cross-references ~2 min, axes ~2 min, export a few seconds.
 
+**The second map costs the same again.** The English pass over the same corpus,
+same model, same machine: 8.2 verses/s, **63.2 min measured**. There is no
+shortcut — a map is an embedding of every verse, and the English verses are not
+the French ones.
+
 ### What a full run produces
+
+The corpus, common to both maps:
 
 | | |
 |---|---|
 | Verses | 31,170 |
 | Aligned with the original text | 31,031 (99.55%) |
 | Aligned with English | 31,050 (99.62%) |
-| Clusters found | 71, plus 46.5% of verses left unclustered |
-| Median similarity to nearest neighbour | 0.934 |
-| Verses echoed in the other Testament | 12,401 (39.8%) |
 | Traditional cross-references loaded | 548,109 links |
-| Agreement with tradition | 81.8% |
-| Viewer payload | `positions.bin` 365 KB · `axes.bin` 974 KB · `verses.json` 20.1 MB (5.7 MB compressed) |
+
+And what each map makes of it:
+
+| | Segond 1910 | World English Bible |
+|---|---|---|
+| Clusters found | 71 | 61 |
+| Verses left unclustered | 14,503 (46.5%) | 13,170 (42.3%) |
+| Median similarity to nearest neighbour | 0.934 | 0.919 |
+| Verses with a relative in the other Testament | 14,225 (45.6%) | 14,662 (47.0%) |
+| Agreement with tradition | 81.8% | 81.1% |
+| Viewer payload | `verses.json` 20.1 MB (5.7 MB gzipped) · `positions.bin` 365 KB · `axes.bin` 974 KB | `geometry_en.json` 3.0 MB (0.9 MB gzipped) · `positions_en.bin` 365 KB · `axes_en.bin` 974 KB |
+
+Two things are worth pausing on. **The agreement with tradition barely moves**:
+81.8% against 81.1%, from two translations that place the verses differently
+enough to produce ten fewer clusters. Whatever the semantic neighbourhood is
+picking up, it is not an artefact of Segond's French. And **the English map
+clusters slightly more of the corpus**, 42.3% unclustered against 46.5%, which
+is a fact about the two translations' uniformity of register rather than a
+verdict on either.
 
 The high proportion of unclustered verses is not a flaw: HDBSCAN refuses to
 assign points that lie in low-density regions rather than forcing them somewhere.
@@ -132,8 +178,10 @@ Lowering `--min-cluster-size` reduces that share.
 
 The screen has four zones:
 
-* **top centre** — the name, then the only two structural decisions: the
-  **layout** (semantic map or named axes) and **search**;
+* **top centre** — the name, then the only three structural decisions: the
+  **layout** (semantic map or named axes), the **text the map is computed on**
+  (Segond 1910 or World English Bible), and **search**. The second appears only
+  when both maps have been built; with one, there is nothing to choose;
 * **bottom centre** — a legend laid **over the map**, permanently restating what
   the current view means. Read it first;
 * **left** — language, the "how to read this map" panel, then the settings:
@@ -146,9 +194,25 @@ panel — **change with the layout**, because what is true of one is false of th
 other: on the semantic map directions mean nothing, on the named axes they mean
 everything.
 
+**Switching maps.** Picking the other text reloads the geometry and slides every
+point to its new place: watching the cloud rearrange is the clearest measure of
+how much the two translations disagree. Three things are reset in the process,
+because they mean nothing across maps — a selected cluster (the numbers match,
+the groups do not), a theme search (its similarities were measured in the other
+vector space), and the axes layout if that map has none. Until you pick a text
+yourself, the map follows the interface language: reading in English while
+looking at Segond's geometry would put a permanent gap between the text on
+screen and what places it. Once you have picked, your choice stands, and
+switching language no longer moves it.
+
 On a narrow screen (under 1100 px), both panels become closed drawers opened by
 the **Settings** and **Verse** buttons: the map then fills the screen, which is
-its whole point. Tapping a point opens the verse drawer; `Esc` closes it.
+its whole point. Tapping a point opens the verse drawer; `Esc` closes it. The
+search field folds away too, behind a magnifier next to those two buttons —
+two permanent lines of header for an occasional gesture is that much map lost.
+Closing it clears the query, deliberately: a query hides the verses that do not
+match it, and a filter running behind an invisible field would hide half the
+Bible with nothing on screen to say so.
 
 <img src="docs/mobile.png" alt="The app on a phone: compact header, drawers
 closed, map full screen" width="300">
@@ -162,9 +226,20 @@ closed, map full screen" width="300">
 | **Cross-Testament echoes** | verses whose closest relatives in meaning sit in the other Testament — the bridges. |
 | **Closeness to a theme** | appears after a theme search: how near each verse is to the idea you described. |
 
-Clicking a point shows the verse in Hebrew or Greek and both translations,
-**each credited to its edition** — so you always know whether you are reading
-Segond or Darby — then two separate lists:
+Clicking a point shows the verse, **each text credited to its edition** — so you
+always know whether you are reading Segond or Darby — then two separate lists.
+
+One text stays in plain sight: the one in your interface language. Everything
+else — the Hebrew or Greek, the other translation — folds into an *Other
+languages* disclosure, open by default. Nothing is removed: the disclosure names
+what is there, one click reopens it, and the choice is remembered so it is a
+setting rather than a chore. The point is length. Three stacked texts pushed the
+neighbours and the cross-references off the screen, which is exactly what one
+comes to the panel for. The text the map was computed on is not repeated here:
+the header selector names it permanently and the legend at the bottom says it
+again.
+
+The two lists:
 
 * **its eight nearest relatives in meaning** across the whole Bible, with the
   similarity spelled out. ↔ marks a link crossing the two Testaments, ✓ a link
@@ -174,17 +249,27 @@ Segond or Darby — then two separate lists:
 **Sharing.** Selecting a verse writes it into the address bar as
 `#v=Matt.6.12`, and a *Copy link* button sits next to the reference. The link
 carries what you are looking at — the verse, the layout, the three axes, the
-colour mode — and deliberately **not** the filters: a link that quietly hid half
-the Bible would leave the reader believing they saw all of it. It does not carry
-your language either, since the OSIS reference is neutral, nor your camera
-angle, which on the semantic map means nothing anyway. Opening someone's link
-never overwrites your own saved settings.
+colour mode, and **which map** — and deliberately **not** the filters: a link
+that quietly hid half the Bible would leave the reader believing they saw all of
+it. The map travels because a verse's nearest relatives are not the same from
+one text to the other: sharing "look at what this verse is closest to" without
+saying in which map would be sharing a claim whose evidence the reader cannot
+see. It does not carry your language, since the OSIS reference is neutral, nor
+your camera angle, which on the semantic map means nothing anyway. Opening
+someone's link never overwrites your own saved settings — the map it carries
+applies for the visit and is not recorded as your choice.
 
 **Navigation:** left-drag to rotate, wheel to zoom, right-drag to pan. Search
 accepts a reference (`Ésaïe 53` as well as `Isaiah 53`), a French or English
 word, and the original text — paste `אלהים` or `λόγος` to isolate every verse
 containing it. Accents, Hebrew vowel points and Greek breathings are ignored, so
 `esaie 53` and `logos` both work.
+
+That box matches **text**, never meaning: typing an idea into it finds only the
+verses that happen to contain those words. Searching by meaning is the theme box
+in the left panel, and it needs `serve.py`. When it is unavailable, a line under
+the search field says so rather than leaving you to conclude the map cannot find
+what you described.
 
 Every setting — filters, colour mode, layout, point size, rotation, language —
 persists between sessions; only the current search does not, since it is a
@@ -277,7 +362,7 @@ stops being merely a neighbourhood and becomes readable.
 
 ## Four decisions about method
 
-### 1. Meaning is computed on the French, not the Hebrew
+### 1. Meaning is computed on a translation, not on the Hebrew
 
 This is the most important point, and the most counter-intuitive.
 
@@ -287,14 +372,26 @@ morphology, lexicon and syntax differ deeply from their ancient states. Applying
 them directly to the WLC would produce a convincing-looking cloud whose groupings
 meant nothing: the worst possible outcome, because it is undetectable by eye.
 
-Since verses are aligned 1:1 across versions, meaning is therefore computed on
-the translation, while the original text stays attached to each point. To check
-this choice rather than take it on trust:
+Since verses are aligned 1:1 across versions, meaning is therefore computed on a
+translation, while the original text stays attached to each point. To check this
+choice rather than take it on trust:
 
 ```bash
 ./.venv/bin/python -m bible_visu.embed --text-column text_orig \
     --out data/processed/embeddings_orig.npy
 ```
+
+**Which is why there are two maps rather than one.** A single map invites the
+reader to take it for the shape of the text itself. Two maps, built by the same
+pipeline from two translations, make the dependency visible instead of merely
+stating it: switch between them and watch the cloud rearrange. The disagreement
+you see is the error bar this project would otherwise have to ask you to
+imagine. Neither map is the reference — the French one merely came first, and
+keeps the unsuffixed filenames for that reason alone.
+
+Two is what the code allows: `paths.BASES` lists them, and the viewer accepts
+those two names. A third would mean widening that list rather than only running
+the pipeline again.
 
 ### 2. Two vector spaces, because measurement forced it
 
@@ -334,6 +431,16 @@ the oldest manuscripts (Mark 16:9-20, John 5:4, the pericope of the adulteress).
 139 verses therefore keep their translation but have no original text;
 `corpus.py` prints the breakdown per book, and the interface says so explicitly
 instead of pretending otherwise.
+
+The same honesty is owed to the holes in the *other* direction. 120 verses have
+no English text. Encoding them as empty strings would be the worst option
+available: the empty string produces a vector, always the same one, so those 120
+verses would come out identical to each other, mutually perfect neighbours, and
+would gather into a dense cluster that means nothing at all. `embed.py`
+therefore **falls back to `text_fr` for any verse whose basis column is empty**,
+which at least places them by their meaning, and prints the count so the map
+never claims to be purer than it is. The same rule covers the 139 missing
+original texts under `--text-column text_orig`.
 
 ### 4. Colour is verified, not chosen by eye
 
@@ -407,24 +514,47 @@ epistles. After correction, "grace" surfaces Galatians 2:21 and 1 Peter 2:19,
 
 ### Natural-language theme search
 
+> **This one needs `serve.py`. It is the only feature that does.**
+>
+> Encoding a sentence nobody has written yet requires the model, and the model
+> is 2 GB of weights plus a 122 MB matrix of corpus vectors — neither is
+> published with the site. So on
+> [the live map](https://macmachi.github.io/bible-3D/), or under Live Server, or
+> on any static host, the viewer probes `api/status`, gets a 404, and **hides
+> the theme box entirely**. Search then falls back to what a static site can
+> do: plain substring matching over references and texts. That is a real
+> fallback, not a broken state — reference lookup, French, English, Hebrew and
+> Greek word search all keep working — but the example below is precisely what
+> it cannot do. To try it you have to clone the repository, run the pipeline,
+> and start `python serve.py`.
+
 Describe an idea in plain words; the sentence is encoded by the same model used
 for the corpus, and each verse is coloured by its closeness. **This is not a word
 search.** For "forgiving those who wrong us", the top six are Matthew 6:12,
 Luke 11:4, Matthew 6:14, John 20:23, Colossians 1:14 and Psalm 25:18 — three of
 which share no word with the query.
 
+The named axes above are the part of this idea that *does* survive static
+hosting: eight thematic directions, computed in advance and shipped as a 974 KB
+binary. They cost no server because nobody types them.
+
 Concrete queries work better than abstract ones: "caring for the stranger and the
 poor" surfaces Deuteronomy 10:18 and Psalm 146:9, whereas a multi-clause phrasing
 such as "God's faithfulness despite his people's unfaithfulness" falls back on
 the field of mercy and loses the contrastive nuance.
 
-Technically, `serve.py` exposes `/api/theme?q=…` and returns a `Float32Array` of
-one similarity per verse (125 KB). Only the top decile is lit: cosine
-similarities are all high, and a gradient across the whole range would show
-nothing. The model is loaded on the first request, once, under a lock; the server
-is multi-threaded so that this loading does not freeze the rest. If
-`sentence-transformers` is missing, the service declares itself unavailable and
-the rest of the viewer carries on.
+Technically, `serve.py` exposes `/api/theme?q=…&basis=…` and returns a
+`Float32Array` of one similarity per verse (125 KB). The `basis` parameter is
+not decoration: a similarity only means something in the space it was measured
+in, so the query is compared against the vectors of the map you are looking at.
+An unknown basis gets a 404 rather than a silent fallback to French, which would
+colour the English map with resemblances established elsewhere. Only the top
+decile is lit: cosine similarities are all high, and a gradient across the whole
+range would show nothing. The model is loaded on the first request, once, under
+a lock, and each basis's matrix on first use; the server is multi-threaded so
+that this loading does not freeze the rest. If `sentence-transformers` is
+missing, or if no `embeddings*.npy` is present, the service declares itself
+unavailable and the rest of the viewer carries on.
 
 ---
 
@@ -499,11 +629,11 @@ src/bible_visu/
   paths.py      on-disk locations — everything inside the project
   fetch.py      downloading                -> data/raw/
   corpus.py     parsing and alignment      -> data/processed/verses.parquet
-  embed.py      semantic vectors           -> data/processed/embeddings.npy
+  embed.py      semantic vectors           -> data/processed/embeddings[_en].npy
   vectors.py    All-but-the-Top denoising
-  project.py    3D UMAP, clusters, neighbours -> data/processed/points.parquet
+  project.py    3D UMAP, clusters, neighbours -> data/processed/points[_en].parquet
   crossrefs.py  cross-references and comparison -> data/processed/crossrefs.npz
-  axes.py       named thematic axes        -> data/processed/axes.npz
+  axes.py       named thematic axes        -> data/processed/axes[_en].npz
   export.py     viewer export              -> viewer/data/
 viewer/
   index.html    structure, styles, security policy in a meta tag
@@ -534,14 +664,32 @@ to `LICENSE`.
 | `book_id` · `book` · `osis` | 1–66, French name, OSIS abbreviation |
 | `testament` · `genre` · `lang` | Old/New, literary family, Hebrew/Greek |
 | `chapter` · `verse` · `canon_pos` | position in the book and in the whole canon |
-| `text_fr` | Louis Segond 1910 — **the basis of the semantic computation** |
-| `text_en` | World English Bible — display only |
+| `text_fr` | Louis Segond 1910 — **basis of the French map** |
+| `text_en` | World English Bible — **basis of the English map**; 120 verses are empty and fall back to `text_fr` when encoding |
 | `text_orig` | pointed Hebrew or Greek, empty when unaligned |
 | `text_consonants` | Hebrew reduced to the 22 consonants, no spaces (for ELS) |
 | `has_orig` · `has_en` · `n_words_fr` | alignment flags and length |
 
 **`data/processed/points.parquet`** adds `x` · `y` · `z`, `cluster`,
 `cluster_label`, `neighbours`, `neighbour_sim` and `nn_cross_testament`.
+`points_en.parquet` is the same table computed from `text_en`, and every one of
+those seven columns differs.
+
+**`viewer/data/`** — what is actually published:
+
+| File | Contents | Versioned |
+|---|---|---|
+| `verses.json` | texts, books, genres, cross-references, **and the French map's geometry** | yes, 20.1 MB |
+| `positions.bin` | XYZ of the French map, Float32 | yes, 365 KB |
+| `axes.bin` | 8 thematic axes × 31,170 verses, Float32 | yes, 974 KB |
+| `geometry_en.json` | the English map's clusters, neighbours and echoes — **nothing else** | yes |
+| `positions_en.bin` · `axes_en.bin` | the same two binaries for the English map | yes |
+| `verses.json.gz` and friends | pre-compressed copies served by `serve.py` | no, `.gitignore` |
+
+The split is the whole reason a second map is cheap: texts, books, genres and
+cross-references are identical in both and stay in `verses.json`, which is
+loaded once. A map costs only its geometry, and the second one is fetched only
+if asked for.
 
 Neighbourhood is computed on the vectors **before** reduction, and therefore
 without the distortion introduced by dropping to three dimensions. Two points far
@@ -571,11 +719,26 @@ verse show it.
 ## Known limitations
 
 - **The map depends on the translation.** It is a map of meaning *as rendered by
-  Segond*, not a truth independent of the translator.
+  one translator*, not a truth independent of them. Two maps are shipped so the
+  dependency can be seen rather than taken on trust, but two is not a
+  sensitivity analysis: it is one comparison.
+- **The two maps share their anchors, and it shows.** The thematic axes are
+  anchored by French sentences on both. An axis is the *difference* of its two
+  poles, and that subtraction cancels what they have in common, the language
+  included. The argument holds up on the English map — the *mercy* pole surfaces
+  1 Chronicles 16:34 and Ruth 2:20, the *judgment* pole Jeremiah 15:14 and
+  Psalm 22:13 — but with visibly more noise than on the French one, where the
+  anchors are in the corpus's own language. Read the extreme verses `axes.py`
+  prints before trusting a pole; English anchors would be the proper fix.
+- **120 verses have no English text** and are placed by their French text on the
+  English map (see above). They are a rounding error at 0.4% of the corpus, not
+  a nothing.
 - **UMAP distorts.** On-screen distances are not proportional to semantic
   distances; only the neighbourhood structure is reliable.
-- **Cluster labels stay in French**, whatever the interface language: they are
-  extracted from the French corpus used for the computation.
+- **Cluster labels are in the language of the computation**, not of the
+  interface: the French map is labelled in French, the English map in English.
+  Reading the English interface over the French map therefore still shows French
+  labels, which is correct — they describe groups formed from French text.
 - **Clusters are not a truth.** Changing `--min-cluster-size` changes their
   number. They are exploration cues, not a classification.
 - **Clusters are lexical as much as thematic.** Sentence embeddings capture the
@@ -584,8 +747,11 @@ verse show it.
 - **139 verses without original text**, 120 without English text.
 - **Axes are worth exactly what their anchors are worth.** They are set by hand
   in `axes.py` and are in no way universal; changing them changes the map.
-- **Theme search requires `serve.py`** and the local model. On static hosting the
-  section is simply hidden.
+- **Theme search requires `serve.py`** and the local model. On static hosting —
+  including the published map — `api/status` answers 404, the section is hidden,
+  and search falls back to substring matching. It is the one feature nobody can
+  try from the public link, and no amount of packaging fixes it: encoding a
+  sentence written just now needs the model present.
 - **Fine stray points appear on some machines**: isolated, very bright pixels in
   a colour absent from the palette, grouped where the cloud is dense. Not
   reproduced in software rendering, at any resolution or pixel density —
@@ -609,8 +775,9 @@ Browsers refuse to load ES modules over `file://`. Use `serve.py`.
 
 **`GET api/status 404` in the console under Live Server or GitHub Pages** — also
 expected. The viewer probes the server to find out whether it can encode a query;
-static hosting answers 404, the "theme search" section then stays hidden and
-everything else works. The browser logs that 404 anyway: it is not an application
+static hosting answers 404, the "theme search" section then stays hidden, a line
+under the search box says that search is substring matching, and everything else
+works. The browser logs that 404 anyway: it is not an application
 error. Note that a static server sends neither the security headers nor the
 compressed version of `verses.json` — 21 MB transferred instead of 5.8.
 `serve.py` does both.

@@ -126,12 +126,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--window", type=int, default=1,
                         help="tolérance en versets lors de la comparaison avec "
                              "la tradition (0 = comparaison stricte)")
+    # Les renvois eux-mêmes ne dépendent d'aucune carte : ils viennent
+    # d'openbible et sont indexés par référence. Ce qui dépend de la carte,
+    # c'est le *bilan* imprimé — combien de voisins sémantiques la tradition
+    # relie aussi. Changer de base rejoue donc la mesure sans rien changer au
+    # fichier exporté, qui reste commun aux deux cartes.
+    parser.add_argument("--basis", default="fr", choices=list(paths.BASES),
+                        help="carte confrontée à la tradition (défaut : fr)")
     args = parser.parse_args(argv)
 
     if not paths.CROSSREFS_ZIP.exists():
         raise SystemExit("Archive absente — lance d'abord `python -m bible_visu.fetch`")
 
-    points = pd.read_parquet(paths.POINTS)
+    points = pd.read_parquet(paths.points(args.basis))
     index_of = {ref: i for i, ref in enumerate(points["ref"])}
     n = len(points)
 
@@ -200,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{100 * (confirmed_strict[with_refs] > 0).mean():.1f} %)")
 
     # similarité sémantique des liens traditionnels
-    embeddings = np.load(paths.EMBEDDINGS)
+    embeddings = np.load(paths.embeddings(args.basis))
     sample_pairs = [(i, j) for i, a in enumerate(adjacency) for j in a if i < j]
     rng = np.random.default_rng(0)
     picked = rng.choice(len(sample_pairs), min(40000, len(sample_pairs)), replace=False)
@@ -211,17 +218,25 @@ def main(argv: list[str] | None = None) -> int:
     for q in (10, 25, 50, 75, 90):
         print(f"  {q}e centile : {np.percentile(link_sim, q):.3f}")
 
-    np.savez_compressed(
-        paths.CROSSREFS,
-        indptr=np.array([0] + list(np.cumsum([len(a) for a in adjacency])),
-                        dtype=np.int64),
-        indices=np.array([j for a in adjacency for j in a], dtype=np.int32),
-        votes=np.array([v for a in adjacency for v in a.values()], dtype=np.int32),
-        confirmed=confirmed,
-        novel_sim=novel_sim,
-        limit=np.int32(args.limit),
-    )
-    print(f"\n{total} liens -> {paths.CROSSREFS}")
+    # `confirmed` et `novel_sim` sont mesurés sur la carte confrontée. Écrire
+    # ceux d'une autre base dans le fichier de référence y laisserait des
+    # chiffres qui ne correspondent plus à son nom : on ne réécrit donc que
+    # depuis la base française, et une autre base ne produit qu'un bilan.
+    if args.basis == "fr":
+        np.savez_compressed(
+            paths.CROSSREFS,
+            indptr=np.array([0] + list(np.cumsum([len(a) for a in adjacency])),
+                            dtype=np.int64),
+            indices=np.array([j for a in adjacency for j in a], dtype=np.int32),
+            votes=np.array([v for a in adjacency for v in a.values()], dtype=np.int32),
+            confirmed=confirmed,
+            novel_sim=novel_sim,
+            limit=np.int32(args.limit),
+        )
+        print(f"\n{total} liens -> {paths.CROSSREFS}")
+    else:
+        print(f"\n{total} liens — base « {args.basis} » : bilan seul, "
+              f"{paths.CROSSREFS.name} inchangé")
 
     # ------------------------------------------------------------------
     print("\nPonts AT ↔ NT les plus forts que la tradition ne relie pas :")

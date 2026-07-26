@@ -13,6 +13,13 @@
   automatiquement aux navigateurs qui acceptent gzip, ce qui divise le transfert
   par trois environ. Le fichier non compressé reste la référence, pour qu'un
   hébergement statique quelconque fonctionne sans configuration.
+
+Quand une seconde carte a été calculée — ``project --basis en`` — s'y ajoutent
+``positions_en.bin``, ``axes_en.bin`` et ``geometry_en.json``. Ce dernier ne
+contient que ce qui dépend du texte de calcul : amas, voisinage, échos entre
+Testaments. Les textes, les livres et les renvois traditionnels sont communs aux
+deux cartes et restent dans ``verses.json``, qui n'est donc pas expédié deux
+fois. Le visualiseur ne charge la seconde carte que si on la lui demande.
 """
 
 from __future__ import annotations
@@ -78,7 +85,15 @@ def editions() -> dict[str, str]:
     return named
 
 
-def build_payload(frame: pd.DataFrame, crossrefs) -> dict:
+def geometry(frame: pd.DataFrame) -> dict:
+    """Ce qui dépend du texte sur lequel la carte a été calculée.
+
+    Amas, voisinage et échos entre Testaments changent d'une base à l'autre :
+    deux versets voisins chez Segond ne le sont pas forcément dans la World
+    English Bible. Les textes eux-mêmes, les livres, les genres et les renvois
+    traditionnels ne bougent pas, et n'ont donc pas à être expédiés deux fois —
+    ce sont eux qui pèsent les vingt mégaoctets.
+    """
     clusters = []
     for cid, group in frame.loc[frame.cluster >= 0].groupby("cluster", observed=True):
         dominant = group["book"].mode()
@@ -93,6 +108,17 @@ def build_payload(frame: pd.DataFrame, crossrefs) -> dict:
         })
     clusters.sort(key=lambda c: -c["size"])
 
+    return {
+        "clusters": clusters,
+        "cluster": frame["cluster"].astype(int).tolist(),
+        "nn": [list(map(int, row)) for row in frame["neighbours"]],
+        "nnSim": [[round(float(v), 3) for v in row]
+                  for row in frame["neighbour_sim"]],
+        "crossT": frame["nn_cross_testament"].astype(int).tolist(),
+    }
+
+
+def build_payload(frame: pd.DataFrame, crossrefs, bases: list[str]) -> dict:
     payload = {
         "count": int(len(frame)),
         "editions": editions(),
@@ -109,18 +135,16 @@ def build_payload(frame: pd.DataFrame, crossrefs) -> dict:
                   for b in sources.BOOKS],
         "genres": list(sources.GENRE_ORDER),
         "genresEn": [sources.GENRE_EN[g] for g in sources.GENRE_ORDER],
-        "clusters": clusters,
+        # Les bases disponibles, la première étant celle que porte ce fichier.
+        # Le visualiseur n'offre le choix que si la liste en compte plusieurs.
+        "bases": bases,
         "bookId": frame["book_id"].astype(int).tolist(),
         "chapter": frame["chapter"].astype(int).tolist(),
         "verse": frame["verse"].astype(int).tolist(),
-        "cluster": frame["cluster"].astype(int).tolist(),
         "fr": frame["text_fr"].tolist(),
         "orig": frame["text_orig"].tolist(),
-        "nn": [list(map(int, row)) for row in frame["neighbours"]],
-        "nnSim": [[round(float(v), 3) for v in row]
-                  for row in frame["neighbour_sim"]],
-        "crossT": frame["nn_cross_testament"].astype(int).tolist(),
     }
+    payload.update(geometry(frame))
     if "text_en" in frame:
         payload["en"] = frame["text_en"].fillna("").tolist()
     if crossrefs:
@@ -135,57 +159,102 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     paths.ensure_dirs()
-    frame = pd.read_parquet(paths.POINTS)
+    if not paths.points("fr").exists():
+        raise SystemExit("points.parquet absent. Lance `python -m bible_visu.project`.")
 
-    positions = frame[["x", "y", "z"]].to_numpy(dtype=np.float32).ravel()
-    bin_path = paths.VIEWER_DATA / "positions.bin"
-    bin_path.write_bytes(positions.tobytes())
+    # La base française reste la référence : ses fichiers gardent leur nom, ce
+    # sont eux que le README cite et que les navigateurs ont en cache. Les
+    # autres bases s'ajoutent à côté, et le visualiseur ignore ce qui manque.
+    available = [b for b in paths.BASES if paths.points(b).exists()]
+    written: list[str] = []
 
-    # Les scores d'axes vont dans un binaire séparé : 8 × 31 170 flottants
-    # gonfleraient le JSON d'un mégaoctet de chiffres pour rien.
-    axes_meta = None
-    axes_path = paths.VIEWER_DATA / "axes.bin"
-    if paths.AXES.exists():
-        blob = np.load(paths.AXES)
-        scores = blob["scores"].astype(np.float32)
-        if len(scores) != len(frame):
-            print("Axes ignorés : nombre de versets incohérent, relance `axes`.")
+    for basis in available:
+        frame = pd.read_parquet(paths.points(basis))
+        suffix = "" if basis == "fr" else f"_{basis}"
+
+        positions = frame[["x", "y", "z"]].to_numpy(dtype=np.float32).ravel()
+        bin_path = paths.VIEWER_DATA / f"positions{suffix}.bin"
+        bin_path.write_bytes(positions.tobytes())
+
+        # Les scores d'axes vont dans un binaire séparé : 8 × 31 170 flottants
+        # gonfleraient le JSON d'un mégaoctet de chiffres pour rien.
+        axes_meta = None
+        axes_path = paths.VIEWER_DATA / f"axes{suffix}.bin"
+        if paths.axes(basis).exists():
+            blob = np.load(paths.axes(basis))
+            scores = blob["scores"].astype(np.float32)
+            if len(scores) != len(frame):
+                print(f"[{basis}] axes ignorés : nombre de versets incohérent, "
+                      f"relance `axes --basis {basis}`.")
+            else:
+                # rangés axe par axe : le visualiseur en lit un d'un seul tenant
+                axes_path.write_bytes(np.ascontiguousarray(scores.T).tobytes())
+                axes_meta = json.loads(
+                    paths.axes(basis).with_suffix(".json").read_text(encoding="utf-8"))
+        elif axes_path.exists():
+            axes_path.unlink()
+
+        if basis == "fr":
+            crossrefs = load_crossrefs(len(frame), args.xref_limit)
+            payload = build_payload(frame, crossrefs, available)
+            name = "verses.json"
         else:
-            # rangés axe par axe : le visualiseur en lit un d'un seul tenant
-            axes_path.write_bytes(np.ascontiguousarray(scores.T).tobytes())
-            axes_meta = json.loads(
-                paths.AXES.with_suffix(".json").read_text(encoding="utf-8"))
-    elif axes_path.exists():
-        axes_path.unlink()
+            # Seule la géométrie change : textes, livres, genres et renvois
+            # restent ceux de verses.json, déjà chargés par le visualiseur.
+            crossrefs = None
+            payload = geometry(frame)
+            payload["basis"] = basis
+            name = f"geometry_{basis}.json"
+        if axes_meta:
+            payload["axes"] = axes_meta
 
-    crossrefs = load_crossrefs(len(frame), args.xref_limit)
-    payload = build_payload(frame, crossrefs)
-    if axes_meta:
-        payload["axes"] = axes_meta
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        json_path = paths.VIEWER_DATA / name
+        json_path.write_text(text, encoding="utf-8")
+        gz_path = paths.VIEWER_DATA / f"{name}.gz"
+        gz_path.write_bytes(gzip.compress(text.encode("utf-8"), compresslevel=6))
+        written.append(basis)
 
-    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    json_path = paths.VIEWER_DATA / "verses.json"
-    json_path.write_text(text, encoding="utf-8")
-    gz_path = paths.VIEWER_DATA / "verses.json.gz"
-    gz_path.write_bytes(gzip.compress(text.encode("utf-8"), compresslevel=6))
+        print(f"\n── base {basis} ──")
+        print(f"positions{suffix}.bin{'':<4}{bin_path.stat().st_size / 1024:>8.0f} Ko "
+              f"({len(frame)} points)")
+        print(f"{name:<20}{json_path.stat().st_size / 1024 / 1024:>8.1f} Mo "
+              f"({len(payload['clusters'])} amas)")
+        print(f"{name + '.gz':<20}{gz_path.stat().st_size / 1024 / 1024:>8.1f} Mo "
+              f"({100 * gz_path.stat().st_size / json_path.stat().st_size:.0f} % "
+              f"de l'original)")
+        if axes_meta:
+            print(f"axes{suffix}.bin{'':<9}{axes_path.stat().st_size / 1024:>8.0f} Ko "
+                  f"({len(axes_meta)} axes)")
+        else:
+            print(f"Axes thématiques absents — lance "
+                  f"`python -m bible_visu.axes --basis {basis}`.")
+        if basis == "fr":
+            if crossrefs is None:
+                print("Renvois absents — lance `python -m bible_visu.crossrefs` "
+                      "pour la couche Harrison.")
+            if "en" not in payload:
+                print("Texte anglais absent — relance `corpus` avec --secondary web.")
 
-    print(f"positions.bin    {bin_path.stat().st_size / 1024:>8.0f} Ko "
-          f"({len(frame)} points)")
-    print(f"verses.json      {json_path.stat().st_size / 1024 / 1024:>8.1f} Mo "
-          f"({len(payload['clusters'])} amas)")
-    print(f"verses.json.gz   {gz_path.stat().st_size / 1024 / 1024:>8.1f} Mo "
-          f"({100 * gz_path.stat().st_size / json_path.stat().st_size:.0f} % "
-          f"de l'original)")
-    if axes_meta:
-        print(f"axes.bin       {axes_path.stat().st_size / 1024:>8.0f} Ko "
-              f"({len(axes_meta)} axes)")
-    else:
-        print("\nAxes thématiques absents — lance `python -m bible_visu.axes`.")
-    if crossrefs is None:
-        print("\nRenvois absents — lance `python -m bible_visu.crossrefs` "
-              "pour la couche Harrison.")
-    if "en" not in payload:
-        print("Texte anglais absent — relance `corpus` avec --secondary web.")
+    # Une carte dont le parquet a disparu ne doit pas rester servie en ligne
+    # avec des coordonnées orphelines : mieux vaut qu'elle ne soit plus offerte.
+    for basis in paths.BASES:
+        if basis in written or basis == "fr":
+            continue
+        for stale in (paths.VIEWER_DATA / f"geometry_{basis}.json",
+                      paths.VIEWER_DATA / f"geometry_{basis}.json.gz",
+                      paths.VIEWER_DATA / f"positions_{basis}.bin",
+                      paths.VIEWER_DATA / f"axes_{basis}.bin"):
+            if stale.exists():
+                stale.unlink()
+                print(f"retiré : {stale.name}")
+
+    if written == ["fr"]:
+        print("\nSeule la carte française est calculée. Pour la seconde :"
+              "\n  python -m bible_visu.embed   --basis en"
+              "\n  python -m bible_visu.project --basis en"
+              "\n  python -m bible_visu.axes    --basis en"
+              "\n  python -m bible_visu.export")
     print("\nLancer :  python serve.py")
     return 0
 

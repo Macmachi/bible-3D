@@ -115,6 +115,9 @@
      Le seuil est à 1100 et non à 1000 à cause d'un cas précis : un iPad Pro
      12,9" en portrait fait 1024 px de large. Il passait donc en mise en page de
      bureau, où 630 px de panneaux ne laissaient que 370 px à la carte. */
+  /* La loupe n'a de sens qu'avec les boutons de tiroir, donc sur écran étroit :
+     ailleurs le champ de recherche est déjà là, en permanence. */
+  #open-search { display: none; }
   /* `.seg.drawer-btns` et non `.drawer-btns` seul : la règle `.seg` plus bas
      redéfinit `display` et l'emporterait à spécificité égale. */
   .seg.drawer-btns { display: none; }
@@ -127,8 +130,19 @@
     }
     #controls.open, #details.open { transform: none; }
     #brand h1 { font-size: 15px; }
-    #brand p { display: none; }
+    /* Le sous-titre seul, et non tout paragraphe de l'en-tête : `#brand p`
+       emportait aussi la ligne sous le champ de recherche, qui porte le compte
+       de résultats et la mention du repli en correspondance de texte. Elles
+       disparaissaient précisément là où l'écran est le plus étroit, donc là où
+       l'on comprend le moins ce que la recherche vient de faire. */
+    #brand > p { display: none; }
     #status { display: none; }
+    /* La recherche passe derrière la loupe : sur un écran de téléphone, deux
+       lignes permanentes pour un usage occasionnel, c'est autant de carte en
+       moins. Elle reste dépliée d'office partout ailleurs. */
+    #topsearch { display: none; }
+    #topsearch.open { display: block; }
+    #open-search { display: inline-flex; align-items: center; padding: 6px 11px; }
   }
   .drawer-btns button[aria-expanded="true"] {
     background: rgba(57,135,229,0.22); color: var(--ink);
@@ -176,6 +190,10 @@
 
   /* Sélecteur de disposition : deux options, donc deux boutons visibles côte à
      côte plutôt qu'une liste déroulante qui cacherait la seconde. */
+  /* `display` en classe l'emporte sur le `display: none` que l'attribut
+     `hidden` tient de la feuille du navigateur : sans cette règle, un sélecteur
+     masqué reste un rectangle vide bordé d'un pixel, posé dans l'en-tête. */
+  .seg[hidden] { display: none; }
   .seg {
     display: inline-flex; pointer-events: auto; overflow: hidden;
     border: 1px solid var(--border); border-radius: 8px;
@@ -190,6 +208,18 @@
   .seg button[aria-pressed="true"] {
     background: rgba(57,135,229,0.22); color: var(--ink); font-weight: 600;
   }
+  /* Le sélecteur de carte peut avoir à télécharger la seconde géométrie : le
+     clic n'a alors pas d'effet immédiat, et sans ce signal on croit qu'il n'a
+     pas été pris. En échec, il reste sur la carte en place plutôt que de
+     laisser un bouton actif désigner ce qui n'a pas été chargé. */
+  #basis-seg.busy { opacity: 0.6; cursor: progress; }
+  #basis-seg.busy button { pointer-events: none; }
+  #basis-seg.failed { border-color: var(--warn); }
+  /* Les noms d'édition sont longs ; sur écran étroit ils passent avant le
+     confort de l'en-tête, mais pas au prix d'un débordement horizontal. */
+  @media (max-width: 560px) {
+    #basis-seg button { padding: 6px 9px; font-size: 12px; }
+  }
 
   #topsearch { pointer-events: auto; width: min(330px, 62vw); }
   #topsearch input {
@@ -198,6 +228,17 @@
   }
   #search-info { text-align: center; margin: 6px 0 0;
                  text-shadow: 0 1px 10px rgba(0,0,0,0.9); }
+  /* La mention permanente sous le champ ne doit pas peser autant qu'un
+     résultat de recherche : elle informe, elle n'annonce rien. */
+  #search-info code {
+    font-size: 0.94em; color: var(--ink-2);
+    background: rgba(255,255,255,0.07); border-radius: 3px; padding: 0 3px;
+  }
+  /* Sur téléphone la mention tient dans la largeur du champ et passe sur deux
+     lignes. Une version élargie, décalée par une marge en pourcentage et un
+     translate, sortait de l'écran par la gauche : le paragraphe reste donc
+     dans le flux, où il est centré par construction. */
+  @media (max-width: 640px) { #search-info { font-size: 11.5px; } }
 
   /* La langue ouvre le panneau : c'est le premier réglage qu'on cherche quand
      l'interface ne s'affiche pas dans la sienne. */
@@ -281,6 +322,24 @@
     letter-spacing: 0.03em;
   }
   .verse-orig + .edition { text-align: inherit; }
+  /* Les langues autres que celle de l'interface se replient. Le titre garde la
+     discrétion d'un crédit d'édition : il annonce ce qui est là sans disputer
+     la place au texte du verset. La flèche remplace le marqueur natif, dont le
+     dessin varie d'un navigateur à l'autre. */
+  details.others { margin: 0 0 6px; }
+  details.others > summary {
+    cursor: pointer; list-style: none; padding: 3px 0;
+    font-size: 11px; color: var(--muted); letter-spacing: 0.03em;
+    text-transform: uppercase; user-select: none;
+  }
+  details.others > summary::-webkit-details-marker { display: none; }
+  details.others > summary::before {
+    content: "▸"; display: inline-block; margin-right: 6px;
+    transition: transform .12s;
+  }
+  details.others[open] > summary::before { transform: rotate(90deg); }
+  details.others > summary:hover { color: var(--ink-2); }
+  details.others[open] > summary { margin-bottom: 6px; }
   .nb .known { color: #199e70; font-weight: 700; }
   .meta { color: var(--muted); font-size: 12px; margin-top: 8px; }
   .tag {
@@ -351,6 +410,7 @@
   #mapkey .mk-p { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
   #mapkey .mk-p b { color: var(--ink-2); font-weight: 600; }
   #mapkey .mk-flat { color: var(--warn); }
+  #mapkey .mk-basis { color: var(--muted); }
   /* Plus de place au centre pour le paragraphe : on ne garde que le titre, qui
      porte l'essentiel. La légende n'est jamais masquée — c'est elle qui répond
      à « qu'est-ce que je regarde ». */
@@ -462,11 +522,27 @@
         <button data-layout="map" data-i18n="layout.map"></button>
         <button data-layout="axes" data-i18n="layout.axes"></button>
       </div>
+      <!-- Le texte sur lequel le sens est calculé. Rempli par le script, et
+           laissé caché tant qu'une seule carte existe : proposer un choix qui
+           n'en est pas un encombrerait l'en-tête pour rien. -->
+      <div class="seg" id="basis-seg" hidden></div>
       <div class="seg drawer-btns">
         <button id="open-controls" aria-expanded="false"
                 data-i18n="mob.controls"></button>
         <button id="open-details" aria-expanded="false"
                 data-i18n="mob.details"></button>
+        <!-- Le champ de recherche prend deux lignes de haut sur téléphone, sa
+             mention comprise, pour un usage occasionnel. Il se replie derrière
+             cette loupe, et la carte récupère la place. Le libellé accessible
+             est posé par le script, comme pour les autres textes. -->
+        <button id="open-search" aria-expanded="false">
+          <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"
+               fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round">
+            <circle cx="8.5" cy="8.5" r="5.4"></circle>
+            <line x1="12.7" y1="12.7" x2="17.4" y2="17.4"></line>
+          </svg>
+        </button>
       </div>
     </div>
     <div id="topsearch">
@@ -587,7 +663,7 @@
          celle-ci. Le référent est déjà supprimé pour tout le document. -->
     <p class="legend-note">
       <a class="colophon-link" href="https://github.com/Macmachi/bible-3D"
-         target="_blank" rel="noopener noreferrer">© 2026 <b>Rymentz</b> · v1.1.0</a>
+         target="_blank" rel="noopener noreferrer">© 2026 <b>Rymentz</b> · v1.2.0</a>
     </p>
     <p class="legend-note" data-i18n="colophon.licence"></p>
     <p class="legend-note" data-i18n="colophon.sources"></p>

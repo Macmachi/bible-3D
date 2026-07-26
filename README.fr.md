@@ -16,7 +16,15 @@ Quatre textes en regard : **hébreu massorétique** (Westminster Leningrad Codex
 **grec** (SBLGNT), **français** (Louis Segond 1910) et **anglais** (World English
 Bible). Interface en français et en anglais.
 
-> **La géométrie est calculée sur le texte français — Louis Segond 1910.**
+> **La géométrie est calculée sur une traduction, et l'on choisit laquelle.**
+> Deux cartes sont livrées : l'une calculée sur **Louis Segond 1910**, l'autre
+> sur la **World English Bible**. Ce ne sont pas deux versions d'une même carte.
+> Deux versets côte à côte chez Segond peuvent se retrouver loin l'un de l'autre
+> dans la WEB, leurs plus proches parents diffèrent, et les amas ne sont pas les
+> mêmes groupes. Cet écart est le sujet, pas un défaut. Un sélecteur dans
+> l'en-tête passe de l'une à l'autre, et la légende posée sur la carte nomme en
+> permanence le texte en vigueur.
+>
 > L'hébreu et le grec sont alignés verset par verset, conservés et affichés
 > avec chaque point, mais ce n'est *pas* eux qui le placent. Aucun modèle
 > d'embedding de phrases n'est entraîné sur l'hébreu biblique ou le grec
@@ -24,10 +32,10 @@ Bible). Interface en français et en anglais.
 > d'apparence convaincante dont les regroupements ne voudraient rien dire.
 >
 > C'est la chose la plus importante à savoir avant de lire la carte : ce que
-> l'on voit est le sens **tel que rendu par Segond**, et non une vérité
-> indépendante du traducteur. Le raisonnement, et la façon de le vérifier
-> soi-même, sont dans
-> [Le sens est calculé sur le français, pas sur l'hébreu](#1-le-sens-est-calculé-sur-le-français-pas-sur-lhébreu).
+> l'on voit est le sens **tel que rendu par un traducteur**, et non une vérité
+> indépendante de lui. Le raisonnement, et la façon de le vérifier soi-même,
+> sont dans
+> [Le sens est calculé sur une traduction, pas sur l'hébreu](#1-le-sens-est-calculé-sur-une-traduction-pas-sur-lhébreu).
 
 Aucune connaissance n'est donnée à la machine : elle ignore les livres, les
 auteurs, les genres et la chronologie. Elle ne voit que du texte. Tout
@@ -82,6 +90,25 @@ export PYTHONPATH=src
 ./.venv/bin/python serve.py                 # ouvre http://127.0.0.1:8000
 ```
 
+Cela construit la carte du Segond. L'anglaise, ce sont les trois mêmes étapes
+avec `--basis en`, puis un seul export qui écrit les deux :
+
+```bash
+./.venv/bin/python -m bible_visu.embed   --basis en   # ~75 min, aussi long que le premier
+./.venv/bin/python -m bible_visu.project --basis en
+./.venv/bin/python -m bible_visu.axes    --basis en
+./.venv/bin/python -m bible_visu.export                # reprend toutes les bases présentes
+```
+
+`--basis` décide à la fois de la colonne encodée et du nom des fichiers écrits,
+si bien que les deux cartes ne s'écrasent jamais. Les fichiers français gardent
+les noms qu'ils ont toujours eus ; les anglais s'installent à côté avec un
+suffixe `_en`. Sauter cette partie ne casse rien : le visualiseur n'offre alors
+qu'une carte et cache le sélecteur. `crossrefs` accepte aussi `--basis`, mais
+seulement pour rejouer la confrontation avec la tradition sur l'autre carte —
+les renvois eux-mêmes sont indexés par référence et n'appartiennent à aucune
+des deux.
+
 Tout reste dans le dossier du projet, **cache des modèles compris**
 (`data/models/`, ~3 Go). Rien n'est écrit dans `~/.cache`, rien n'est installé
 sur le système.
@@ -111,19 +138,40 @@ Pour une première exploration, `--model intfloat/multilingual-e5-base` donne un
 carte déjà très lisible en un tiers du temps. Les étapes suivantes sont rapides :
 projection ~5 min, renvois ~2 min, axes ~2 min, export quelques secondes.
 
+**La seconde carte coûte autant que la première.** La passe anglaise sur le même
+corpus, même modèle, même machine : 8,2 versets/s, **63,2 min mesurées**. Il n'y
+a pas de raccourci — une carte, c'est l'encodage de chaque verset, et les
+versets anglais ne sont pas les versets français.
+
 ### Ce que produit une exécution complète
+
+Le corpus, commun aux deux cartes :
 
 | | |
 |---|---|
 | Versets | 31 170 |
 | Alignement avec le texte original | 31 031 (99,55 %) |
 | Alignement avec l'anglais | 31 050 (99,62 %) |
-| Amas trouvés | 71, plus 46,5 % de versets hors amas |
-| Similarité médiane au plus proche voisin | 0,934 |
-| Versets ayant un écho dans l'autre Testament | 12 401 (39,8 %) |
 | Renvois traditionnels chargés | 548 109 liens |
-| Accord avec la tradition | 81,8 % |
-| Données du visualiseur | `positions.bin` 365 Ko · `axes.bin` 974 Ko · `verses.json` 20,1 Mo (5,7 Mo compressé) |
+
+Et ce que chaque carte en fait :
+
+| | Segond 1910 | World English Bible |
+|---|---|---|
+| Amas trouvés | 71 | 61 |
+| Versets hors amas | 14 503 (46,5 %) | 13 170 (42,3 %) |
+| Similarité médiane au plus proche voisin | 0,934 | 0,919 |
+| Versets ayant un parent dans l'autre Testament | 14 225 (45,6 %) | 14 662 (47,0 %) |
+| Accord avec la tradition | 81,8 % | 81,1 % |
+| Données du visualiseur | `verses.json` 20,1 Mo (5,7 Mo compressé) · `positions.bin` 365 Ko · `axes.bin` 974 Ko | `geometry_en.json` 3,0 Mo (0,9 Mo compressé) · `positions_en.bin` 365 Ko · `axes_en.bin` 974 Ko |
+
+Deux chiffres méritent qu'on s'y arrête. **L'accord avec la tradition bouge à
+peine** : 81,8 % contre 81,1 %, à partir de deux traductions qui placent les
+versets assez différemment pour produire dix amas de moins. Ce que capte le
+voisinage sémantique n'est donc pas un artefact du français de Segond. Et **la
+carte anglaise range un peu plus de versets**, 42,3 % hors amas contre 46,5 %,
+ce qui dit quelque chose de l'uniformité de registre des deux traductions et
+rien de la qualité de l'une ou de l'autre.
 
 Le fort taux de « hors amas » n'est pas un défaut : HDBSCAN refuse d'affecter les
 points situés en zone peu dense, plutôt que de les ranger de force quelque part.
@@ -135,8 +183,11 @@ Baisser `--min-cluster-size` en réduit la proportion.
 
 L'écran tient en quatre zones :
 
-* **au centre en haut** — le nom, puis les deux seules décisions structurantes :
-  la **disposition** (carte sémantique ou axes nommés) et la **recherche** ;
+* **au centre en haut** — le nom, puis les trois seules décisions
+  structurantes : la **disposition** (carte sémantique ou axes nommés), le
+  **texte sur lequel la carte est calculée** (Segond 1910 ou World English
+  Bible) et la **recherche**. Le deuxième n'apparaît que si les deux cartes ont
+  été construites ; avec une seule, il n'y a rien à choisir ;
 * **au centre en bas** — une légende posée **sur la carte**, qui rappelle en
   permanence ce que la vue en cours signifie. C'est la première chose à lire ;
 * **à gauche** — la langue, l'encart « comment lire », puis les réglages :
@@ -150,10 +201,27 @@ Les deux textes explicatifs — la légende du bas et l'encart « comment lire �
 l'autre : sur la carte sémantique les directions ne signifient rien, sur les
 axes nommés elles signifient tout.
 
+**Changer de carte.** Choisir l'autre texte recharge la géométrie et fait
+glisser chaque point vers sa nouvelle place : regarder le nuage se réagencer est
+la mesure la plus claire du désaccord entre les deux traductions. Trois choses
+sont remises à zéro au passage, parce qu'elles ne veulent rien dire d'une carte
+à l'autre — un amas sélectionné (les numéros se correspondent, pas les groupes),
+une recherche par thème (ses similarités ont été mesurées dans l'autre espace
+vectoriel) et la disposition par axes si cette carte n'en a pas. Tant que l'on
+n'a pas choisi soi-même, la carte suit la langue de l'interface : lire en
+anglais en regardant la géométrie du Segond mettrait un décalage permanent entre
+le texte affiché et ce qui le place. Une fois le choix fait, il tient, et changer
+de langue ne le déplace plus.
+
 Sur écran étroit (moins de 1100 px), les deux panneaux deviennent des tiroirs
 fermés que l'on ouvre par les boutons **Réglages** et **Verset** : la carte
 occupe alors tout l'écran, ce qui est son seul intérêt. Toucher un point ouvre
-le tiroir du verset ; `Échap` referme.
+le tiroir du verset ; `Échap` referme. Le champ de recherche se replie lui aussi,
+derrière une loupe posée à droite de ces deux boutons — deux lignes d'en-tête
+permanentes pour un geste occasionnel, c'est autant de carte en moins. Le
+refermer efface la requête, délibérément : une requête masque les versets qui ne
+lui correspondent pas, et un filtre agissant derrière un champ invisible
+cacherait la moitié de la Bible sans que rien à l'écran ne le dise.
 
 <img src="docs/mobile.png" alt="L'application sur téléphone : en-tête
 compact, tiroirs fermés, carte plein écran" width="300">
@@ -168,9 +236,20 @@ compact, tiroirs fermés, carte plein écran" width="300">
 | **Échos entre testaments** | les versets dont les plus proches parents sémantiques se trouvent dans l'autre Testament — les ponts. |
 | **Proximité au thème** | apparaît après une recherche par thème : à quel point chaque verset se rapproche de l'idée décrite. |
 
-Cliquer un point affiche le verset en hébreu ou en grec et ses deux
-traductions, **chacun crédité de son édition** — on sait donc toujours si l'on
-lit Segond ou Darby —, puis deux listes distinctes :
+Cliquer un point affiche le verset, **chaque texte crédité de son édition** —
+on sait donc toujours si l'on lit Segond ou Darby —, puis deux listes distinctes.
+
+Un seul texte reste en clair : celui de la langue de l'interface. Tout le reste
+— l'hébreu ou le grec, l'autre traduction — se replie dans un dépliant *Autres
+langues*, ouvert par défaut. Rien n'est supprimé : le titre du dépliant dit ce
+qui est là, un clic le rouvre, et le choix est mémorisé, si bien que c'est un
+réglage et non une manipulation à refaire à chaque verset. Ce qui est en jeu,
+c'est la longueur. Trois textes empilés repoussaient les voisins et les renvois
+hors de l'écran, c'est-à-dire exactement ce que l'on vient chercher dans ce
+panneau. Le texte sur lequel la carte a été calculée n'est pas redoublé ici : le
+sélecteur de l'en-tête le nomme en permanence, et la légende du bas le répète.
+
+Les deux listes :
 
 * **ses huit plus proches parents sémantiques** dans toute la Bible, avec la
   similarité chiffrée. ↔ marque un lien qui traverse les deux Testaments, ✓ un
@@ -180,17 +259,28 @@ lit Segond ou Darby —, puis deux listes distinctes :
 **Partage.** Sélectionner un verset l'inscrit dans la barre d'adresse sous la
 forme `#v=Matt.6.12`, et un bouton *Copier le lien* se place à côté de la
 référence. Le lien porte ce que l'on regarde — le verset, la disposition, les
-trois axes, le mode de couleur — et volontairement **pas** les filtres : un lien
-qui masquerait la moitié de la Bible sans le dire laisserait croire au lecteur
-qu'il voit tout. Il ne porte pas non plus la langue, la référence OSIS étant
-neutre, ni l'angle de caméra, qui sur la carte sémantique ne signifie rien.
-Ouvrir le lien de quelqu'un ne remplace jamais vos propres réglages.
+trois axes, le mode de couleur et **quelle carte** — et volontairement **pas**
+les filtres : un lien qui masquerait la moitié de la Bible sans le dire
+laisserait croire au lecteur qu'il voit tout. La carte voyage parce que les plus
+proches parents d'un verset ne sont pas les mêmes d'un texte à l'autre :
+partager « regarde de quoi ce verset est le plus proche » sans dire dans quelle
+carte, ce serait partager une affirmation dont l'autre ne verrait pas la preuve.
+Il ne porte pas la langue, la référence OSIS étant neutre, ni l'angle de caméra,
+qui sur la carte sémantique ne signifie rien. Ouvrir le lien de quelqu'un ne
+remplace jamais vos propres réglages — la carte qu'il transporte vaut pour la
+visite et n'est pas enregistrée comme votre choix.
 
 **Navigation :** clic gauche glissé pour tourner, molette pour zoomer, clic droit
 glissé pour déplacer. La recherche accepte une référence (`Ésaïe 53` comme
 `Isaiah 53`), un mot français ou anglais, et le texte original — coller `אלהים`
 ou `λόγος` isole tous les versets qui le contiennent. Accents, voyelles
 hébraïques et esprits grecs sont ignorés : `esaie 53` et `logos` fonctionnent.
+
+Ce champ compare du **texte**, jamais du sens : y taper une idée ne trouve que
+les versets qui contiennent ces mots-là. Chercher par le sens, c'est l'encart
+thématique du panneau de gauche, et il demande `serve.py`. Quand il est
+indisponible, une ligne sous le champ de recherche le dit, plutôt que de laisser
+conclure que la carte ne sait pas trouver ce qu'on a décrit.
 
 Tous les réglages — filtres, mode de couleur, disposition, taille des points,
 rotation, langue — sont conservés d'une session à l'autre ; seule la recherche
@@ -284,7 +374,7 @@ que la carte cesse d'être seulement un voisinage et devient lisible.
 
 ## Quatre décisions de méthode
 
-### 1. Le sens est calculé sur le français, pas sur l'hébreu
+### 1. Le sens est calculé sur une traduction, pas sur l'hébreu
 
 C'est le point le plus important, et le plus contre-intuitif.
 
@@ -303,6 +393,19 @@ vérifier ce choix plutôt que le croire :
 ./.venv/bin/python -m bible_visu.embed --text-column text_orig \
     --out data/processed/embeddings_orig.npy
 ```
+
+**C'est pour cela qu'il y a deux cartes et non une.** Une carte unique invite le
+lecteur à la prendre pour la forme du texte lui-même. Deux cartes, construites
+par la même chaîne à partir de deux traductions, rendent la dépendance visible
+au lieu de se contenter de l'énoncer : on bascule de l'une à l'autre et l'on
+regarde le nuage se réagencer. Le désaccord que l'on voit est la barre d'erreur
+que ce projet devrait sinon demander d'imaginer. Aucune des deux n'est la
+référence — la française est simplement arrivée la première, et c'est à ce titre
+seulement qu'elle garde les noms de fichiers sans suffixe.
+
+Deux, c'est ce que le code autorise : `paths.BASES` les énumère et le
+visualiseur n'accepte que ces deux noms. Une troisième demanderait d'élargir
+cette liste, pas seulement de relancer la chaîne.
 
 ### 2. Deux espaces vectoriels, parce que la mesure l'a imposé
 
@@ -344,6 +447,16 @@ passages absents des manuscrits les plus anciens (Marc 16:9-20, Jean 5:4, la
 péricope de la femme adultère). 139 versets gardent donc leur traduction mais
 n'ont pas de texte original ; `corpus.py` en imprime le détail par livre, et
 l'interface le dit explicitement au lieu de faire semblant.
+
+La même honnêteté est due aux trous dans l'*autre* sens. 120 versets n'ont pas
+de texte anglais. Les encoder comme chaînes vides serait la pire option
+disponible : la chaîne vide produit un vecteur, toujours le même, si bien que
+ces 120 versets sortiraient identiques entre eux, voisins parfaits les uns des
+autres, et se rassembleraient en un amas dense qui ne dit rigoureusement rien.
+`embed.py` **retombe donc sur `text_fr` pour tout verset dont la colonne de base
+est vide**, ce qui les place au moins selon leur sens, et affiche le compte pour
+que la carte ne prétende jamais être plus pure qu'elle n'est. La même règle
+couvre les 139 textes originaux manquants sous `--text-column text_orig`.
 
 ### 4. La couleur est vérifiée, pas choisie à l'œil
 
@@ -419,11 +532,33 @@ finales des épîtres. Après correction, « grâce » remonte Galates 2:21 et
 
 ### Recherche par thème en langage naturel
 
+> **Celle-ci exige `serve.py`. C'est la seule fonction dans ce cas.**
+>
+> Encoder une phrase que personne n'a encore écrite demande le modèle, et le
+> modèle pèse 2 Go de poids plus 122 Mo de vecteurs du corpus — ni l'un ni
+> l'autre n'est publié avec le site. Sur
+> [la carte en ligne](https://macmachi.github.io/bible-3D/), sous Live Server ou
+> sur n'importe quel hébergement statique, le visualiseur sonde `api/status`,
+> reçoit un 404 et **masque entièrement l'encart de recherche thématique**. La
+> recherche retombe alors sur ce qu'un site statique sait faire : la
+> correspondance de texte sur les références et les versets. C'est un repli
+> réel, pas un état cassé — référence, mot français, anglais, hébreu et grec
+> continuent de fonctionner — mais l'exemple ci-dessous est précisément ce qu'il
+> ne sait pas faire. Une ligne sous le champ de recherche le dit à l'écran,
+> faute de quoi on tape une idée, on n'obtient rien et l'on conclut que la carte
+> ne sait pas la trouver. Pour l'essayer, il faut cloner le dépôt, faire tourner
+> la chaîne et lancer `python serve.py`.
+
 Décris une idée en toutes lettres ; la phrase est encodée par le modèle qui a
 servi au corpus, et chaque verset est coloré selon sa proximité. **Ce n'est pas
 une recherche de mots.** Pour « le pardon des offenses », les six premiers sont
 Matthieu 6:12, Luc 11:4, Matthieu 6:14, Jean 20:23, Colossiens 1:14 et
 Psaume 25:18 — dont trois ne partagent aucun mot avec la requête.
+
+Les axes nommés ci-dessus sont la part de cette idée qui, elle, survit à
+l'hébergement statique : huit directions thématiques, calculées d'avance et
+livrées dans un binaire de 974 Ko. Elles ne coûtent aucun serveur parce que
+personne ne les saisit.
 
 Les requêtes concrètes fonctionnent mieux que les abstraites : « prendre soin de
 l'étranger et du pauvre » remonte Deutéronome 10:18 et Psaume 146:9, tandis
@@ -431,13 +566,19 @@ qu'une formulation à plusieurs propositions comme « la fidélité de Dieu malg
 l'infidélité de son peuple » se rabat sur le champ de la miséricorde et perd la
 nuance d'opposition.
 
-Techniquement, `serve.py` expose `/api/theme?q=…` et renvoie un `Float32Array`
-d'une similarité par verset (125 Ko). Seul le décile supérieur est éclairé : les
-similarités cosinus sont toutes élevées, et un dégradé sur toute l'étendue ne
-montrerait rien. Le modèle est chargé à la première requête, une seule fois,
-sous verrou ; le serveur est multi-fils pour que ce chargement ne fige pas le
-reste. Si `sentence-transformers` est absent, le service se déclare indisponible
-et le reste du visualiseur continue.
+Techniquement, `serve.py` expose `/api/theme?q=…&basis=…` et renvoie un
+`Float32Array` d'une similarité par verset (125 Ko). Le paramètre `basis` n'est
+pas décoratif : une similarité ne veut dire quelque chose que dans l'espace où
+elle a été mesurée, la requête est donc comparée aux vecteurs de la carte que
+l'on regarde. Une base inconnue reçoit un 404 plutôt qu'un repli silencieux sur
+le français, qui colorierait la carte anglaise avec des ressemblances établies
+ailleurs. Seul le décile supérieur est éclairé : les similarités cosinus sont
+toutes élevées, et un dégradé sur toute l'étendue ne montrerait rien. Le modèle
+est chargé à la première requête, une seule fois, sous verrou, et la matrice de
+chaque base à son premier usage ; le serveur est multi-fils pour que ce
+chargement ne fige pas le reste. Si `sentence-transformers` est absent, ou si
+aucun `embeddings*.npy` n'est présent, le service se déclare indisponible et le
+reste du visualiseur continue.
 
 ---
 
@@ -513,11 +654,11 @@ src/bible_visu/
   paths.py      emplacements sur disque — tout dans le projet
   fetch.py      téléchargement             -> data/raw/
   corpus.py     parsing et alignement      -> data/processed/verses.parquet
-  embed.py      vecteurs sémantiques       -> data/processed/embeddings.npy
+  embed.py      vecteurs sémantiques       -> data/processed/embeddings[_en].npy
   vectors.py    débruitage All-but-the-Top
-  project.py    UMAP 3D, amas, voisinage   -> data/processed/points.parquet
+  project.py    UMAP 3D, amas, voisinage   -> data/processed/points[_en].parquet
   crossrefs.py  renvois et confrontation   -> data/processed/crossrefs.npz
-  axes.py       axes thématiques nommés    -> data/processed/axes.npz
+  axes.py       axes thématiques nommés    -> data/processed/axes[_en].npz
   export.py     export du visualiseur      -> viewer/data/
 viewer/
   index.html    structure, styles, politique de sécurité en balise meta
@@ -548,14 +689,32 @@ Chaque fichier source porte l'en-tête `© 2026 Rymentz — CC BY-NC 4.0` et ren
 | `book_id` · `book` · `osis` | 1–66, nom français, abréviation OSIS |
 | `testament` · `genre` · `lang` | Ancien/Nouveau, famille littéraire, hébreu/grec |
 | `chapter` · `verse` · `canon_pos` | position dans le livre et dans le canon entier |
-| `text_fr` | Louis Segond 1910 — **base du calcul sémantique** |
-| `text_en` | World English Bible — affichage seulement |
+| `text_fr` | Louis Segond 1910 — **base de la carte française** |
+| `text_en` | World English Bible — **base de la carte anglaise** ; 120 versets sont vides et retombent sur `text_fr` à l'encodage |
 | `text_orig` | hébreu vocalisé ou grec, vide si non aligné |
 | `text_consonants` | hébreu réduit aux 22 consonnes, sans espace (pour l'ELS) |
 | `has_orig` · `has_en` · `n_words_fr` | drapeaux d'alignement et longueur |
 
 **`data/processed/points.parquet`** ajoute `x` · `y` · `z`, `cluster`,
 `cluster_label`, `neighbours`, `neighbour_sim` et `nn_cross_testament`.
+`points_en.parquet` est la même table calculée depuis `text_en`, et chacune de
+ces sept colonnes diffère.
+
+**`viewer/data/`** — ce qui est réellement publié :
+
+| Fichier | Contenu | Versionné |
+|---|---|---|
+| `verses.json` | textes, livres, genres, renvois, **et la géométrie de la carte française** | oui, 20,1 Mo |
+| `positions.bin` | XYZ de la carte française, Float32 | oui, 365 Ko |
+| `axes.bin` | 8 axes thématiques × 31 170 versets, Float32 | oui, 974 Ko |
+| `geometry_en.json` | amas, voisinage et échos de la carte anglaise — **rien d'autre** | oui |
+| `positions_en.bin` · `axes_en.bin` | les deux mêmes binaires pour la carte anglaise | oui |
+| `verses.json.gz` et consorts | copies pré-compressées servies par `serve.py` | non, `.gitignore` |
+
+C'est ce découpage qui rend la seconde carte peu coûteuse : textes, livres,
+genres et renvois sont identiques dans les deux et restent dans `verses.json`,
+chargé une seule fois. Une carte ne coûte que sa géométrie, et la seconde n'est
+téléchargée que si on la demande.
 
 Le voisinage est calculé sur les vecteurs **avant** réduction, donc sans la
 distorsion du passage en trois dimensions. Deux points éloignés à l'écran peuvent
@@ -585,22 +744,42 @@ montrent.
 ## Limites connues
 
 - **La carte dépend de la traduction.** C'est une carte du sens *tel que rendu
-  par Segond*, pas une vérité indépendante du traducteur.
+  par un traducteur*, pas une vérité indépendante de lui. Deux cartes sont
+  livrées pour que cette dépendance se voie au lieu de se croire, mais deux
+  n'est pas une analyse de sensibilité : c'est une comparaison.
+- **Les deux cartes partagent leurs ancrages, et cela se voit.** Les axes
+  thématiques sont ancrés par des phrases françaises sur l'une comme sur
+  l'autre. Un axe est la *différence* de ses deux pôles, et cette soustraction
+  annule ce qu'ils ont en commun, la langue comprise. L'argument tient sur la
+  carte anglaise — le pôle *miséricorde* remonte 1 Chroniques 16:34 et Ruth
+  2:20, le pôle *jugement* Jérémie 15:14 et Psaume 22:13 — mais avec nettement
+  plus de bruit que sur la française, où les ancrages sont dans la langue du
+  corpus. Lire les versets extrêmes qu'affiche `axes.py` avant de faire
+  confiance à un pôle ; des ancrages anglais seraient la vraie correction.
 - **UMAP déforme.** Les distances à l'écran ne sont pas proportionnelles aux
   distances sémantiques ; seule la structure de voisinage est fiable.
-- **Les étiquettes d'amas restent en français**, quelle que soit la langue de
-  l'interface : elles sont extraites du corpus français qui sert au calcul.
+- **Les étiquettes d'amas sont dans la langue du calcul**, pas dans celle de
+  l'interface : la carte française est étiquetée en français, l'anglaise en
+  anglais. Lire l'interface anglaise sur la carte française laisse donc des
+  étiquettes françaises, et c'est correct — elles décrivent des groupes formés
+  à partir du texte français.
 - **Les amas ne sont pas une vérité.** Changer `--min-cluster-size` change leur
   nombre. Ce sont des indices d'exploration, pas une classification.
 - **Les amas sont lexicaux autant que thématiques.** Les embeddings de phrases
   captent le sujet de surface — noms propres, lieux, style narratif — d'où des
   étiquettes comme « travailla · enfanta ». Le débruitage ne corrige pas ce
   point (mesuré, voir plus haut).
-- **139 versets sans texte original**, 120 sans texte anglais.
+- **139 versets sans texte original**, 120 sans texte anglais. Ces derniers
+  sont placés par leur texte français sur la carte anglaise (voir plus haut).
+  0,4 % du corpus, ce qui est une broutille mais pas rien.
 - **Les axes valent ce que valent leurs ancrages.** Ils sont fixés à la main
   dans `axes.py` et n'ont rien d'universel ; les modifier change la carte.
 - **La recherche par thème exige `serve.py`** et le modèle local. Sur un
-  hébergement statique, la section reste simplement masquée.
+  hébergement statique — la carte publiée comprise — `api/status` répond 404, la
+  section est masquée et la recherche retombe sur la correspondance de texte.
+  C'est la seule fonction que personne ne peut essayer depuis le lien public, et
+  aucun empaquetage n'y change rien : encoder une phrase écrite à l'instant
+  exige la présence du modèle.
 - **De fins points parasites apparaissent sur certaines machines** : des pixels
   isolés, très lumineux, d'une couleur absente de la palette, groupés là où le
   nuage est dense. Non reproduit en rendu logiciel, à aucune résolution ni
@@ -627,8 +806,9 @@ Les navigateurs refusent de charger des modules ES en `file://`. Utiliser
 **`GET api/status 404` dans la console avec Live Server ou GitHub Pages** — c'est
 attendu. Le visualiseur sonde le serveur pour savoir s'il sait encoder une
 requête ; un hébergement statique répond 404, la section « recherche par thème »
-reste alors masquée et tout le reste fonctionne. Le navigateur consigne quand
-même ce 404 : ce n'est pas une erreur de l'application. À noter qu'un serveur
+reste alors masquée, une ligne sous le champ de recherche annonce qu'on est en
+correspondance de texte, et tout le reste fonctionne. Le navigateur consigne
+quand même ce 404 : ce n'est pas une erreur de l'application. À noter qu'un serveur
 statique n'envoie ni les en-têtes de sécurité, ni la version compressée de
 `verses.json` — 21 Mo transférés au lieu de 5,8. `serve.py` fait les deux.
 

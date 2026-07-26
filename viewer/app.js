@@ -70,6 +70,7 @@ const STRINGS = {
     'search.h': 'Recherche',
     'search.ph': 'Ésaïe 53, אלהים, λόγος, berger…',
     'search.hint': 'Référence, mot français, anglais, hébreu ou grec.',
+    'search.textOnly': 'Chercher par le sens demande <code>serve.py</code> en local.',
     'search.found': '{n} verset(s) contiennent « {q} ».',
     'color.h': 'Couleur',
     'color.canon': 'Position dans le canon (séquentiel)',
@@ -118,6 +119,12 @@ const STRINGS = {
     'mapkey.flat': 'Le nuage s\'aplatit en plan : {a} et {b} se recouvrent à {r} %. Ces deux thèmes vont ensemble dans le texte, il n\'en reste donc que deux directions distinctes sur trois.',
     'details.intro': 'Chaque point est un verset, placé selon le <em>sens</em> de son texte et non selon sa position dans le livre. Deux versets proches dans l\'espace parlent de la même chose, même s\'ils sont séparés par mille pages.',
     'details.noOrig': 'Pas de texte original aligné pour ce verset (versification différente, ou passage absent du texte critique).',
+    'details.otherTexts': 'Autres langues',
+    'basis.title': 'Texte sur lequel le sens est calculé. Changer de texte '
+                 + 'change la carte : ce sont deux cartes, pas deux versions '
+                 + 'd\'une même carte.',
+    'mapkey.basis': 'Sens calculé sur : {edition}. Un autre texte donnerait '
+                  + 'd\'autres voisinages.',
     'details.neighbours': 'Versets les plus proches par le sens',
     'details.neighboursHint': 'Similarité cosinus. Le signe ↔ marque un lien qui traverse les deux Testaments ; ✓ un lien que la tradition relie aussi.',
     'details.xrefs': 'Renvois traditionnels',
@@ -132,6 +139,7 @@ const STRINGS = {
     'layout.map': 'Carte sémantique',
     'layout.axes': 'Axes nommés',
     'mob.controls': 'Réglages', 'mob.details': 'Verset',
+    'mob.search': 'Recherche',
     'layout.mapNote': 'Les positions viennent d\u2019UMAP : les axes n\u2019ont aucune signification, seule la proximité en a une.',
     'layout.axesNote': 'Chaque axe est défini par des phrases d\u2019ancrage, et sa direction est la différence entre ses deux pôles. Ici, une position <em>se lit</em> : un verset à droite penche vers le pôle nommé à droite.',
     'theme.h': 'Recherche par thème',
@@ -167,6 +175,7 @@ const STRINGS = {
     'search.h': 'Search',
     'search.ph': 'Isaiah 53, אלהים, λόγος, shepherd…',
     'search.hint': 'Reference, or a word in English, French, Hebrew or Greek.',
+    'search.textOnly': 'Searching by meaning needs <code>serve.py</code>, run locally.',
     'search.found': '{n} verse(s) contain “{q}”.',
     'color.h': 'Colour',
     'color.canon': 'Position in the canon (sequential)',
@@ -215,6 +224,11 @@ const STRINGS = {
     'mapkey.flat': 'The cloud flattens into a plane: {a} and {b} overlap by {r} %. Those two themes go together in the text, so only two of the three directions remain distinct.',
     'details.intro': 'Each dot is a verse, placed by the <em>meaning</em> of its text rather than its position in the book. Two verses close in space are about the same thing, even a thousand pages apart.',
     'details.noOrig': 'No aligned original text for this verse (different versification, or a passage absent from the critical text).',
+    'details.otherTexts': 'Other languages',
+    'basis.title': 'The text the meaning is computed on. Changing it changes '
+                 + 'the map: these are two maps, not two versions of one.',
+    'mapkey.basis': 'Meaning computed on: {edition}. Another text would give '
+                  + 'other neighbourhoods.',
     'details.neighbours': 'Nearest verses by meaning',
     'details.neighboursHint': 'Cosine similarity. ↔ marks a link crossing the two Testaments; ✓ one the tradition also draws.',
     'details.xrefs': 'Traditional cross-references',
@@ -229,6 +243,7 @@ const STRINGS = {
     'layout.map': 'Semantic map',
     'layout.axes': 'Named axes',
     'mob.controls': 'Settings', 'mob.details': 'Verse',
+    'mob.search': 'Search',
     'layout.mapNote': 'Positions come from UMAP: the axes carry no meaning, only proximity does.',
     'layout.axesNote': 'Each axis is defined by anchor sentences, and its direction is the difference between its two poles. Here a position <em>can be read</em>: a verse on the right leans toward the pole named on the right.',
     'theme.h': 'Search by theme',
@@ -387,6 +402,16 @@ for (let slot = 0; slot < N; slot++) {
 const bookById = new Map(data.books.map(b => [b.id, b]));
 const genreIndex = new Map(data.genres.map((g, i) => [g, i]));
 const clusterById = new Map(data.clusters.map(c => [c.id, c]));
+
+/* Les textes sur lesquels une carte a pu être calculée. Le premier est celui
+   que porte `verses.json` ; les autres arrivent à la demande. Un export qui
+   n'en connaît qu'un — le cas de tout jeu de données antérieur — donne une
+   liste d'un seul élément, et le sélecteur reste caché. */
+const BASES = (Array.isArray(data.bases) && data.bases.length
+  ? data.bases : ['fr']).filter(b => b === 'fr' || b === 'en');
+
+/** L'édition qui a servi au calcul, telle qu'on la crédite sous un verset. */
+const basisEdition = basis => (data.editions || {})[basis] || basis.toUpperCase();
 
 /* ------------------------------------------------------------------- trois D */
 const container = el('scene');
@@ -642,6 +667,14 @@ const state = {
   pointSize: 0.85,
   layout: 'map',
   axisPick: [0, 1, 2],
+  showAltTexts: true,   // dépliant des langues autres que celle de l'interface
+  /* Le texte sur lequel la carte est calculée. Il suit la langue de
+     l'interface tant que personne n'a choisi explicitement : lire en anglais
+     et regarder la carte du Segond serait un décalage permanent entre le texte
+     affiché et la géométrie qui le place. Mais un choix explicite l'emporte
+     ensuite, et ne se fait plus déloger par une bascule de langue. */
+  basis: lang === 'en' && BASES.includes('en') ? 'en' : 'fr',
+  basisChosen: false,
   query: '',          // volontairement non mémorisée d'une session à l'autre
   isolatedGenre: null,
   selected: -1,
@@ -662,6 +695,10 @@ function saveState() {
     pointSize: state.pointSize,
     layout: state.layout,
     axisPick: state.axisPick,
+    showAltTexts: state.showAltTexts,
+    // enregistrée seulement si elle a été choisie : sinon elle doit rester
+    // libre de suivre la langue au prochain chargement
+    basis: state.basisChosen ? state.basis : null,
     lang,
   }));
 }
@@ -692,6 +729,13 @@ function restoreState() {
   }
   state.onlyCross = !!saved.onlyCross;
   state.showXrefs = !!saved.showXrefs && !!data.xref;
+  // seul un repli explicite est restauré : un réglage enregistré avant que ce
+  // dépliant n'existe doit retrouver l'affichage complet, pas un panneau replié
+  if (saved.showAltTexts === false) state.showAltTexts = false;
+  if (typeof saved.basis === 'string' && BASES.includes(saved.basis)) {
+    state.basis = saved.basis;
+    state.basisChosen = true;
+  }
   state.spin = !!saved.spin;
   const size = Number(saved.pointSize);
   if (Number.isFinite(size) && size >= 0.2 && size <= 3) state.pointSize = size;
@@ -756,6 +800,14 @@ function permalink() {
     parts.push(`a=${state.axisPick.map(i => AXES[i].id).join(',')}`);
   }
   if (state.colorMode !== 'canon') parts.push(`c=${state.colorMode}`);
+  /* La carte voyage avec le lien, au même titre que la disposition. Les
+     voisins d'un verset ne sont pas les mêmes d'un texte à l'autre : partager
+     « regarde ses plus proches parents » sans dire dans quelle carte, ce
+     serait partager une affirmation dont l'autre ne verrait pas la même
+     preuve. Elle n'apparaît que si elle n'est pas la valeur d'origine. */
+  if (state.basis !== 'fr' && BASES.includes(state.basis)) {
+    parts.push(`b=${state.basis}`);
+  }
   return parts.join('&');
 }
 
@@ -799,6 +851,8 @@ function readPermalink() {
     if (picks.length === 3 && picks.every(i => i >= 0)) out.axisPick = picks;
   }
 
+  if (BASES.includes(found.get('b'))) out.basis = found.get('b');
+
   const verse = found.get('v');
   if (verse) {
     const i = indexOfOsis(verse);
@@ -820,6 +874,11 @@ function applyShared(shared) {
   }
   if (shared.axisPick) state.axisPick = shared.axisPick;
   if (shared.layout) state.layout = shared.layout;
+  /* La carte reçue s'impose pour la visite, sans être mémorisée : c'est le
+     choix de l'expéditeur, pas une préférence du destinataire. `basisChosen`
+     reste donc tel quel, et le prochain chargement sans lien retrouvera la
+     carte que le lecteur suivait. */
+  if (shared.basis) state.basis = shared.basis;
 }
 
 const visible = new Uint8Array(N).fill(1);
@@ -914,12 +973,25 @@ function refresh() {
   el('status').textContent =
     t('status.shown', { shown: num(shown), total: num(N) }) +
     (state.query ? t('status.query', { q: state.query, n: found }) : '');
-  // textContent, pas innerHTML : la saisie de l'utilisateur n'est jamais du
-  // balisage. Vide hors recherche : la ligne est sous le titre, au milieu de
-  // l'écran, et n'a pas à y rester en permanence — l'exemple du champ suffit.
-  el('search-info').textContent = state.query
-    ? t('search.found', { n: found, q: state.query })
-    : '';
+  /* textContent, pas innerHTML : la saisie de l'utilisateur n'est jamais du
+     balisage. Hors recherche, la ligne reste vide — elle est sous le titre, au
+     milieu de l'écran, et n'a pas à y rester en permanence.
+                                                                             |
+     Sauf sur un hébergement statique, où le champ ne fait que de la
+     correspondance de texte. Rien ne le dit dans le champ lui-même, et la
+     section « recherche par thème » qui l'expliquerait est justement celle qui
+     disparaît. Le lecteur tape une idée, n'obtient rien, et conclut que la
+     carte ne sait pas la trouver — alors qu'elle sait, ailleurs. Une ligne
+     l'annonce donc, précisément là où la question se pose. */
+  const info = el('search-info');
+  if (state.query) {
+    info.textContent = t('search.found', { n: found, q: state.query });
+  } else if (themeAvailable) {
+    info.textContent = '';
+  } else {
+    // texte de l'application, jamais de donnée extérieure : le <code> est à nous
+    info.innerHTML = t('search.textOnly');
+  }
 
   // le repère 3D suit les filtres, jamais l'inverse
   syncSelection();
@@ -1117,17 +1189,31 @@ function showDetails(i) {
           lang="${origLang}">${esc(data.orig[i])}</p>${edition(origLang)}`
     : `<p class="legend-note">${esc(t('details.noOrig'))}</p>`;
 
-  /* Les deux traductions sont montrées, celle de l'interface en premier, et
-     chacune est créditée : « Bouillonnant d'ardeur » ne se lit pas de la même
-     façon selon qu'on sait que c'est Segond ou Darby. */
-  const shown = lang === 'en' && data.en
-    ? [['en', data.en[i]], ['fr', data.fr[i]]]
-    : [['fr', data.fr[i]], ['en', data.en ? data.en[i] : '']];
-  const translations = shown
+  /* Chaque texte est crédité de son édition : « Bouillonnant d'ardeur » ne se
+     lit pas de la même façon selon qu'on sait que c'est Segond ou Darby.
+                                                                             |
+     Un seul texte reste en clair : celui de la langue de l'interface. Tout le
+     reste — l'original, l'autre traduction — tient dans un dépliant. Le panneau
+     devient assez court pour que les voisins et les renvois tiennent dans
+     l'écran, ce qui est tout l'intérêt, et rien n'est effacé pour autant : le
+     titre du dépliant dit que ces textes existent, un clic les rouvre.
+                                                                             |
+     Le texte qui a servi au calcul n'a pas à figurer ici en plus : le
+     sélecteur de l'en-tête le nomme en permanence, et la légende du bas le
+     répète. Le redoubler dans le panneau rallongerait tout pour redire ce qui
+     est déjà à l'écran. */
+  const texts = (pairs, muted) => pairs
     .filter(([, text]) => text)
     .map(([code, text], rank) =>
-      `<p class="verse-fr${rank ? ' verse-alt' : ''}">${esc(text)}</p>` +
+      `<p class="verse-fr${rank || muted ? ' verse-alt' : ''}">${esc(text)}</p>` +
       edition(code)).join('');
+
+  const versions = { fr: data.fr[i], en: data.en ? data.en[i] : '' };
+  const kept = lang === 'en' && versions.en ? 'en' : 'fr';
+  const primary = [[kept, versions[kept]]];
+  const secondary = orig
+    + texts(['fr', 'en'].filter(code => code !== kept)
+              .map(code => [code, versions[code]]), true);
 
   const neighbours = data.nn[i]
     .map((j, k) => verseButton(i, j, data.nnSim[i][k])).join('');
@@ -1137,8 +1223,11 @@ function showDetails(i) {
     : `<p class="legend-note">${esc(t('details.noXrefs'))}</p>`;
 
   el('det-body').innerHTML = `
-    ${orig}
-    ${translations}
+    ${texts(primary, false)}
+    ${secondary ? `<details class="others"${state.showAltTexts ? ' open' : ''}>
+      <summary>${esc(t('details.otherTexts'))}</summary>
+      ${secondary}
+    </details>` : ''}
     <p class="meta">
       <span class="tag">${esc(genreLabel(book.genre))}</span>
       <span class="tag">${esc(t(`testament.${book.testament}`))}</span>
@@ -1150,6 +1239,16 @@ function showDetails(i) {
     ${sectionTitle(t('details.xrefs'))}
     <p class="legend-note" style="margin:0 0 8px">${t('details.xrefsHint')}</p>
     ${xrefs}`;
+
+  /* Le choix vaut pour tous les versets, pas pour celui-ci seulement : le
+     replier à chaque clic serait une corvée, pas un réglage. `toggle` ne
+     remonte pas dans l'arbre, l'écouteur va donc sur l'élément lui-même, posé
+     après l'écriture du panneau. */
+  const others = el('det-body').querySelector('details.others');
+  if (others) others.addEventListener('toggle', () => {
+    state.showAltTexts = others.open;
+    saveState();
+  });
 
   halo.position.fromArray(positions, i * 3);
   syncSelection();
@@ -1420,6 +1519,28 @@ for (const id of ['controls', 'details']) {
 for (const button of document.querySelectorAll('[data-close]')) {
   button.addEventListener('click', closeDrawers);
 }
+
+/* La loupe déplie le champ de recherche sur écran étroit.
+                                                                             |
+   Le refermer efface la requête, et ce n'est pas une commodité : une requête
+   masque les versets qui ne lui correspondent pas. La laisser vivre derrière
+   un champ invisible cacherait la moitié de la Bible sans que rien ne le dise,
+   ce que ce projet refuse ailleurs — dans les permaliens, dans la légende. Un
+   filtre qu'on ne voit pas ne doit pas pouvoir agir. */
+el('open-search').addEventListener('click', () => {
+  const box = el('topsearch');
+  const open = !box.classList.contains('open');
+  box.classList.toggle('open', open);
+  el('open-search').setAttribute('aria-expanded', String(open));
+  if (open) {
+    el('search').focus();
+  } else if (state.query) {
+    state.query = '';
+    el('search').value = '';
+    refresh();
+  }
+  measureScene();
+});
 addEventListener('keydown', event => {
   if (event.key === 'Escape') closeDrawers();
 });
@@ -1441,6 +1562,150 @@ if (AXES.length) {
       }
     }
   } catch { /* la carte reste utilisable sans les axes */ }
+}
+
+/* ------------------------------------------------------- les deux cartes */
+/* Deux cartes, pas deux versions d'une carte. Le sens est calculé sur un texte
+   précis : changer de texte change les voisinages, les amas et les échos entre
+   Testaments. Deux versets côte à côte chez Segond peuvent se retrouver loin
+   l'un de l'autre dans la World English Bible, et cet écart est le sujet, pas
+   un défaut.
+                                                                             |
+   Ne changent pas : les versets eux-mêmes, les livres, les genres et les
+   renvois traditionnels. Ils restent dans `verses.json`, chargé une fois. Une
+   seconde carte ne coûte donc que sa géométrie, quelques mégaoctets, et n'est
+   téléchargée que si on la demande. */
+const geometries = new Map([['fr', {
+  clusters: data.clusters, cluster: data.cluster, nn: data.nn,
+  nnSim: data.nnSim, crossT: data.crossT,
+  positions: new Float32Array(umapPositions), axes: axisScores,
+}]]);
+
+async function loadGeometry(basis) {
+  if (geometries.has(basis)) return geometries.get(basis);
+
+  const [buffer, geometry] = await Promise.all([
+    fetch(`data/positions_${basis}.bin`).then(r => {
+      if (!r.ok) throw new Error(`positions_${basis}.bin introuvable`);
+      return r.arrayBuffer();
+    }),
+    fetch(`data/geometry_${basis}.json`).then(r => {
+      if (!r.ok) throw new Error(`geometry_${basis}.json introuvable`);
+      return r.json();
+    }),
+  ]);
+
+  const coordinates = new Float32Array(buffer);
+  if (coordinates.length !== N * 3 || geometry.cluster.length !== N) {
+    throw new Error(`carte « ${basis} » désynchronisée du corpus`);
+  }
+  // Le tampon des liens de voisinage est dimensionné une fois pour toutes au
+  // démarrage. Une carte calculée avec un autre `--neighbours` le déborderait.
+  if (geometry.nn[0].length !== data.nn[0].length) {
+    throw new Error(`carte « ${basis} » : ${geometry.nn[0].length} voisins `
+      + `par verset au lieu de ${data.nn[0].length}`);
+  }
+
+  /* Les axes sont refaits sur la nouvelle base : les mêmes thèmes, mais
+     projetés sur d'autres vecteurs. Leur absence n'est pas fatale, elle prive
+     seulement cette carte de la disposition par axes. */
+  let axes = null;
+  if (AXES.length) {
+    try {
+      const response = await fetch(`data/axes_${basis}.bin`);
+      if (response.ok) {
+        const blob = await response.arrayBuffer();
+        if (blob.byteLength === AXES.length * N * 4) axes = new Float32Array(blob);
+      }
+    } catch { /* la carte reste utilisable sans ses axes */ }
+  }
+
+  const entry = {
+    clusters: geometry.clusters, cluster: geometry.cluster, nn: geometry.nn,
+    nnSim: geometry.nnSim, crossT: geometry.crossT,
+    positions: coordinates, axes,
+  };
+  geometries.set(basis, entry);
+  return entry;
+}
+
+/** Bascule la carte sur un autre texte de calcul. */
+async function setBasis(basis, { explicit = false, animate = true } = {}) {
+  if (!BASES.includes(basis)) return false;
+  if (basis === state.basis && geometries.has(basis)) {
+    if (explicit) { state.basisChosen = true; saveState(); }
+    renderBasisSeg();
+    return true;
+  }
+
+  const seg = el('basis-seg');
+  seg.classList.add('busy');
+  let geometry;
+  try {
+    geometry = await loadGeometry(basis);
+  } catch (error) {
+    // Une carte annoncée mais absente ne doit pas laisser l'application dans un
+    // état à moitié changé : on ne touche à rien et on le dit.
+    seg.classList.remove('busy');
+    seg.classList.add('failed');
+    console.error(error);
+    renderBasisSeg();
+    return false;
+  }
+  seg.classList.remove('busy', 'failed');
+
+  state.basis = basis;
+  if (explicit) state.basisChosen = true;
+
+  data.clusters = geometry.clusters;
+  data.cluster = geometry.cluster;
+  data.nn = geometry.nn;
+  data.nnSim = geometry.nnSim;
+  data.crossT = geometry.crossT;
+  clusterById.clear();
+  for (const cluster of geometry.clusters) clusterById.set(cluster.id, cluster);
+  umapPositions.set(geometry.positions);
+  axisScores = geometry.axes;
+
+  // Un amas choisi n'a pas d'équivalent dans l'autre carte : ce ne sont pas les
+  // mêmes groupes, seulement des numéros qui se ressemblent. Garder le filtre
+  // masquerait la Bible au nom d'un amas qui n'existe plus.
+  if (state.cluster !== 'all' && !clusterById.has(Number(state.cluster))) {
+    state.cluster = 'all';
+  }
+  // Les scores de thème ont été calculés dans l'espace vectoriel de l'autre
+  // texte. Les garder colorierait la nouvelle carte avec les similarités de
+  // l'ancienne, ce qui serait faux sans en avoir l'air.
+  if (themeScores) resetTheme();
+  if (!axisScores && state.layout === 'axes') state.layout = 'map';
+  el('layout-seg').hidden = !axisScores;
+
+  /* `renderAll` pose la nouvelle carte d'un coup. On garde donc les positions
+     de l'ancienne pour repartir d'elles : voir les points glisser d'un
+     agencement à l'autre montre l'ampleur du désaccord entre les deux textes,
+     là où un remplacement instantané donnerait deux images sans rapport. */
+  const from = animate ? new Float32Array(positions) : null;
+  renderAll();
+  renderBasisSeg();
+  if (from) {
+    const goal = new Float32Array(positions);
+    positions.set(from);
+    moveTo(goal);
+  }
+  saveState();
+  return true;
+}
+
+/** Met le sélecteur de carte à jour, et le cache s'il n'y a rien à choisir. */
+function renderBasisSeg() {
+  const seg = el('basis-seg');
+  seg.hidden = BASES.length < 2;
+  if (seg.hidden) return;
+  seg.innerHTML = BASES.map(basis => {
+    const name = esc(basisEdition(basis));
+    return `<button data-basis="${basis}" title="${esc(t('basis.title'))}"
+      aria-pressed="${basis === state.basis}">${name}</button>`;
+  }).join('');
 }
 
 const axisName = axis => (lang === 'en' ? axis.en : axis.fr);
@@ -1579,6 +1844,14 @@ function renderMapKey() {
   const body = document.querySelector('#mapkey .mk-p');
   head.textContent = t(useAxes ? 'mapkey.axes.h' : 'mapkey.map.h');
   body.innerHTML = t(useAxes ? 'mapkey.axes.p' : 'mapkey.map.p');
+  /* Sur quel texte le sens a-t-il été calculé ? La question ne se pose pas
+     tant qu'il n'y a qu'une réponse possible ; dès qu'il y en a deux, la
+     légende doit la donner, sans quoi on lit une carte sans savoir de quoi
+     elle est la carte. */
+  if (BASES.length > 1) {
+    body.innerHTML += `<br><span class="mk-basis">${esc(t('mapkey.basis',
+      { edition: basisEdition(state.basis) }))}</span>`;
+  }
   if (!useAxes) return;
 
   /* Deux axes fortement corrélés donnent un nuage aplati en plan — la
@@ -1676,6 +1949,11 @@ function applyLayout(animate = true) {
 let themeScores = null;
 let themeFloor = 0;
 let themeCeil = 1;
+/* Faux tant que le serveur n'a pas répondu qu'il sait encoder une phrase. La
+   valeur de départ est la bonne : sur un hébergement statique, la sonde
+   `api/status` n'aboutira jamais, et la ligne d'aide sous le champ doit être là
+   dès le premier rendu plutôt que d'apparaître après coup. */
+let themeAvailable = false;
 
 function themeIntensity(i) {
   if (!themeScores) return 0;
@@ -1710,7 +1988,10 @@ async function searchTheme(query) {
   status.className = 'legend-note busy';
   status.textContent = t('theme.loading');
   try {
-    const response = await fetch(`api/theme?q=${encodeURIComponent(query)}`);
+    // la base voyage avec la requête : une similarité ne vaut que dans
+    // l'espace vectoriel de la carte que l'on regarde
+    const response = await fetch(`api/theme?q=${encodeURIComponent(query)}`
+      + `&basis=${encodeURIComponent(state.basis)}`);
     if (!response.ok) {
       const detail = await response.json().catch(() => ({}));
       throw new Error(detail.error || `HTTP ${response.status}`);
@@ -1748,7 +2029,8 @@ el('theme-go').addEventListener('click', () => {
 el('theme-input').addEventListener('keydown', event => {
   if (event.key === 'Enter') el('theme-go').click();
 });
-el('theme-clear').addEventListener('click', () => {
+/** Efface la recherche par thème et le mode de couleur qui en dépendait. */
+function resetTheme() {
   themeScores = null;
   el('theme-input').value = '';
   el('theme-status').textContent = t('theme.hint');
@@ -1762,7 +2044,9 @@ el('theme-clear').addEventListener('click', () => {
     renderLegend();
   }
   refresh();
-});
+}
+
+el('theme-clear').addEventListener('click', resetTheme);
 el('theme-top').addEventListener('click', event => {
   const button = event.target.closest('[data-goto]');
   if (!button) return;
@@ -1777,6 +2061,12 @@ el('layout-seg').addEventListener('click', event => {
   state.layout = button.dataset.layout;
   applyLayout();
   saveState();
+});
+
+el('basis-seg').addEventListener('click', event => {
+  const button = event.target.closest('[data-basis]');
+  if (!button || button.dataset.basis === state.basis) return;
+  setBasis(button.dataset.basis, { explicit: true });
 });
 for (const [slot, id] of [[0, 'axis-x'], [1, 'axis-y'], [2, 'axis-z']]) {
   el(id).addEventListener('change', event => {
@@ -1847,6 +2137,9 @@ function applyStaticText() {
   }
   document.title = t('app.title');
   el('search').title = t('search.hint');
+  // la loupe porte une icône, pas un mot : son libellé passe par l'attribut
+  el('open-search').setAttribute('aria-label', t('mob.search'));
+  el('open-search').title = t('mob.search');
   el('subtitle').textContent =
     t('app.subtitle', { n: num(N), c: data.clusters.length });
   el('det-sub').textContent = state.selected >= 0
@@ -1875,7 +2168,16 @@ function setLanguage(code) {
   lang = code;
   el('lang-select').value = code;
   renderAll();
+  renderBasisSeg();
   saveState();
+  /* Tant que la carte n'a pas été choisie explicitement, elle suit la langue :
+     lire en anglais et regarder la géométrie du Segond serait un décalage
+     permanent entre le texte affiché et ce qui le place. Le changement de
+     langue, lui, ne l'attend pas — sa géométrie peut demander un aller-retour
+     réseau, et l'interface n'a aucune raison de rester figée pendant ce
+     temps. */
+  const follows = code === 'en' && BASES.includes('en') ? 'en' : 'fr';
+  if (!state.basisChosen && follows !== state.basis) setBasis(follows);
 }
 
 /* ------------------------------------------------------------------- départ */
@@ -1897,6 +2199,18 @@ el('psize').value = state.pointSize;
 material.uniforms.uScale.value = state.pointSize;
 el('lang-select').value = lang;
 
+/* La carte demandée, si ce n'est pas celle qu'apporte `verses.json`, est
+   chargée avant le premier rendu : la faire apparaître puis se remplacer sous
+   les yeux du visiteur donnerait à voir deux résultats là où il n'y en a
+   qu'un. Un échec est sans gravité — on reste sur la carte française et le
+   sélecteur le montre. */
+if (state.basis !== 'fr') {
+  setProgress(0.8, t('loading.scene'));
+  const ok = await setBasis(state.basis, { animate: false });
+  if (!ok) state.basis = 'fr';
+}
+renderBasisSeg();
+
 // la disposition par axes n'a de sens que si `bible_visu.axes` a tourné
 if (axisScores) {
   el('layout-seg').hidden = false;
@@ -1912,6 +2226,7 @@ try {
   const status = await fetch('api/status').then(r => r.ok ? r.json() : null);
   if (status && status.theme) {
     el('theme-sect').hidden = false;
+    themeAvailable = true;
   } else if (status) {
     el('theme-sect').hidden = false;
     el('theme-go').disabled = true;
